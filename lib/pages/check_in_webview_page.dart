@@ -262,6 +262,60 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
     });
   };
 
+  const installVConsole = () => {
+    const createInstance = () => {
+      if (window.VConsole && !window.__bbtotalVConsole) {
+        try {
+          window.__bbtotalVConsole = new window.VConsole();
+          postDebug('vConsole installed');
+        } catch (error) {
+          postDebug('vConsole init failed: ' + String(error));
+        }
+      }
+    };
+
+    if (window.VConsole) {
+      createInstance();
+      return;
+    }
+
+    const existing = document.getElementById('bbtotal-vconsole-script');
+    if (existing) {
+      postDebug('vConsole script already loading');
+      return;
+    }
+
+    const sources = [
+      'https://unpkg.com/vconsole@latest/dist/vconsole.min.js',
+      'https://cdn.jsdelivr.net/npm/vconsole@latest/dist/vconsole.min.js',
+    ];
+
+    let index = 0;
+    const script = document.createElement('script');
+    script.id = 'bbtotal-vconsole-script';
+
+    const loadNext = () => {
+      if (index >= sources.length) {
+        postDebug('vConsole script load failed for all sources');
+        return;
+      }
+      script.src = sources[index];
+      index += 1;
+    };
+
+    script.onload = () => {
+      postDebug('vConsole script loaded: ' + script.src);
+      createInstance();
+    };
+    script.onerror = () => {
+      postDebug('vConsole script failed: ' + script.src);
+      loadNext();
+    };
+
+    loadNext();
+    document.documentElement.appendChild(script);
+  };
+
   const installNetworkHooks = () => {
     const authHeaders = {
       'login-token': bridgeContext.loginToken || '',
@@ -595,6 +649,7 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
   };
 
   installConsoleHooks();
+  installVConsole();
   installNetworkHooks();
   window.__bbtotalPreset = payload;
   window.__bbtotalApplyPreset = applyPayload;
