@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -24,6 +25,7 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
   late final Uri _resolvedUri =
       widget.preset.buildCheckInUri(CheckInWebViewPage.inspectedCheckInUrl);
   bool _hideNativeChrome = false;
+  Timer? _earlyInjectionTimer;
   late final WebViewController _controller =
       WebViewController()
         ..setJavaScriptMode(JavaScriptMode.unrestricted)
@@ -82,6 +84,7 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
         ..setNavigationDelegate(
           NavigationDelegate(
             onPageStarted: (String url) {
+              _startEarlyInjectionLoop();
               if (!mounted) {
                 return;
               }
@@ -91,6 +94,7 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
               });
             },
             onPageFinished: (String url) async {
+              _earlyInjectionTimer?.cancel();
               await _injectPresetIntoPage();
               await Future<void>.delayed(const Duration(seconds: 1));
               await _collectPageDiagnostics();
@@ -111,6 +115,23 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
   bool _isLoading = true;
   String _pageDiagnostics = 'No page diagnostics yet.';
   String _status = 'Opening check-in page...';
+
+  void _startEarlyInjectionLoop() {
+    _earlyInjectionTimer?.cancel();
+    int attempts = 0;
+    _earlyInjectionTimer = Timer.periodic(const Duration(milliseconds: 180), (
+      Timer timer,
+    ) async {
+      attempts += 1;
+      try {
+        await _controller.runJavaScript(_buildInjectionScript(widget.preset));
+      } catch (_) {}
+
+      if (attempts >= 25) {
+        timer.cancel();
+      }
+    });
+  }
 
   void _appendDiagnostic(String message) {
     final String current = _pageDiagnostics == 'No page diagnostics yet.'
@@ -529,6 +550,51 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
     return result;
   };
 
+  const seedContext = () => {
+    if (!window.bbgrxx || typeof window.bbgrxx !== 'object') {
+      window.bbgrxx = {};
+    }
+
+    const userinfoResult = buildUserinfoResult();
+    const zzjgxxResult = userinfoResult.zzjgxx || {};
+    const zzjgxxResults = zzjgxxResult.results || {};
+
+    Object.assign(window.bbgrxx, {
+      blqd: bridgeContext.blqd || 'app_02',
+      username: bridgeContext.username || '',
+      userid: bridgeContext.userid || '',
+      grbh: bridgeContext.grbh || '',
+      khbh: bridgeContext.grbh || '',
+      zjhm: bridgeContext.zjhm || '',
+      loginToken: bridgeContext.loginToken || '',
+      tyLoginToken: bridgeContext.loginToken || '',
+      jgbh: bridgeContext.jgbh || '',
+      jgbm: bridgeContext.jgbm || '',
+      zxbm: bridgeContext.zxbm || '',
+      qycode: bridgeContext.qycode || '',
+      zzjgdmz: bridgeContext.zzjgdmz || '',
+      cheque: bridgeContext.cheque || '',
+      ticket: bridgeContext.ticket || '',
+      userinfo: userinfoResult,
+      zzjgxx: zzjgxxResult,
+      userData: zzjgxxResults.userData || {},
+      gjmsg: zzjgxxResults.gjmsg || {},
+      zxjgInfo: zzjgxxResults.zxjgInfo || {},
+      deptmsg: zzjgxxResults.deptmsg || [],
+      personmsg: zzjgxxResults.personmsg || [],
+      rolemsg: zzjgxxResults.rolemsg || {},
+    });
+
+    window.userinfo = userinfoResult;
+    window.zzjgxx = zzjgxxResult;
+    window.userData = zzjgxxResults.userData || {};
+    window.gjmsg = zzjgxxResults.gjmsg || {};
+    window.zxjgInfo = zzjgxxResults.zxjgInfo || {};
+    window.deptmsg = zzjgxxResults.deptmsg || [];
+    window.personmsg = zzjgxxResults.personmsg || [];
+    window.rolemsg = zzjgxxResults.rolemsg || {};
+  };
+
   const handleCommand = (input) => {
     let command = input;
     try {
@@ -632,29 +698,7 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
 
   const applyPayload = () => {
     try {
-      if (!window.bbgrxx || typeof window.bbgrxx !== 'object') {
-        window.bbgrxx = {};
-      }
-
-      Object.assign(window.bbgrxx, {
-        blqd: bridgeContext.blqd || 'app_02',
-        username: bridgeContext.username || '',
-        userid: bridgeContext.userid || '',
-        grbh: bridgeContext.grbh || '',
-        khbh: bridgeContext.grbh || '',
-        zjhm: bridgeContext.zjhm || '',
-        loginToken: bridgeContext.loginToken || '',
-        tyLoginToken: bridgeContext.loginToken || '',
-        jgbh: bridgeContext.jgbh || '',
-        jgbm: bridgeContext.jgbm || '',
-        zxbm: bridgeContext.zxbm || '',
-        qycode: bridgeContext.qycode || '',
-        zzjgdmz: bridgeContext.zzjgdmz || '',
-        cheque: bridgeContext.cheque || '',
-        ticket: bridgeContext.ticket || '',
-        zzjgxx: (zzjgxx && Object.keys(zzjgxx).length) ? zzjgxx : (window.bbgrxx.zzjgxx || {}),
-        userinfo: buildUserinfoResult(),
-      });
+      seedContext();
       window.bbgrxx.locationMsg = payload;
       window.bbgrxx.updatingLocationMsg = payload;
 
@@ -692,6 +736,7 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
   const installBridge = () => {
     window.__bbtotalPreset = payload;
     window.__bbtotalApplyPreset = applyPayload;
+    window.__bbtotalSeedContext = seedContext;
     window.__bbtotalHandleNativeCommand = handleCommand;
 
     window.SYAppModel = window.SYAppModel || {};
@@ -743,13 +788,21 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
   installConsoleHooks();
   installVConsole();
   installNetworkHooks();
-  window.__bbtotalPreset = payload;
-  window.__bbtotalApplyPreset = applyPayload;
-  installBridge();
-  applyPayload();
-  postDebug('bbtotal bridge installed');
+  if (!window.__bbtotalBridgeInstalled) {
+    installBridge();
+    window.__bbtotalBridgeInstalled = true;
+    postDebug('bbtotal bridge installed');
+  }
+  seedContext();
+  postDebug('bbtotal context seeded');
 })();
 ''';
+  }
+
+  @override
+  void dispose() {
+    _earlyInjectionTimer?.cancel();
+    super.dispose();
   }
 
   @override
