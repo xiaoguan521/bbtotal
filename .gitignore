@@ -44,3 +44,8 @@ inspect_state_now.png
 mobile_dxgl_page.png
 location-bridge-demo.html
 location-bridge-demo.png
+browser_webview_harness.html
+browser_harness_server.ps1
+launch-browser-harness.ps1
+.browser-harness-profile/
+.browser-harness-server.pid

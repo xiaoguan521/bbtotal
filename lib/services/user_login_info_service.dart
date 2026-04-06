@@ -60,36 +60,9 @@ class UserLoginInfoService {
       throw const UserLoginInfoServiceException('没有查询到该用户的登录信息。');
     }
 
-    UserLoginInfo? desktopLoginInfo;
-    for (final UserLoginInfo item in loginInfos) {
-      if (item.blqd == 'zmd') {
-        desktopLoginInfo = item;
-        break;
-      }
-    }
-
-    UserLoginInfo? desktopDetail;
-    if (desktopLoginInfo != null) {
-      try {
-        desktopDetail = await _fetchUserInfoViaToken(desktopLoginInfo);
-      } catch (_) {
-        desktopDetail = desktopLoginInfo;
-      }
-    }
-
     for (final UserLoginInfo item in loginInfos) {
       if (item.isMobileApp) {
-        final UserLoginInfo mobileDetail = await _fetchUserInfoViaToken(item);
-        return mobileDetail.copyWith(
-          desktopChannel: desktopDetail?.blqd ?? desktopLoginInfo?.blqd ?? '',
-          desktopJgbh: desktopDetail?.jgbh ?? desktopLoginInfo?.jgbh ?? '',
-          desktopJgbm: desktopDetail?.jgbm ?? '',
-          desktopLoginToken:
-              desktopDetail?.loginToken ?? desktopLoginInfo?.loginToken ?? '',
-          desktopQycode: desktopDetail?.qycode ?? '',
-          desktopZxbm: desktopDetail?.zxbm ?? '',
-          desktopZzjgdmz: desktopDetail?.zzjgdmz ?? '',
-        );
+        return _fetchUserInfoViaToken(item);
       }
     }
 

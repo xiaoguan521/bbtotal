@@ -76,20 +76,12 @@ class ChequeService {
 
   Future<ChequeInfo> fetchCheque(CheckInLocationPreset preset) async {
     final loginInfo = preset.loginInfo;
-    final String headerLoginToken = loginInfo.desktopLoginToken.isNotEmpty
-        ? loginInfo.desktopLoginToken
-        : loginInfo.loginToken;
-    final String headerChannel = loginInfo.desktopChannel.isNotEmpty
-        ? loginInfo.desktopChannel
-        : loginInfo.blqd;
-    final String headerJgbh = loginInfo.desktopZxbm.isNotEmpty
-        ? loginInfo.desktopZxbm
-        : (loginInfo.desktopJgbh.isNotEmpty ? loginInfo.desktopJgbh : loginInfo.jgbh);
-    final String headerZzjgdmz = loginInfo.desktopZzjgdmz.isNotEmpty
-        ? loginInfo.desktopZzjgdmz
-        : (loginInfo.desktopQycode.isNotEmpty
-            ? loginInfo.desktopQycode
-            : (loginInfo.zzjgdmz.isNotEmpty ? loginInfo.zzjgdmz : loginInfo.qycode));
+    final String headerLoginToken = loginInfo.loginToken;
+    final String headerChannel = loginInfo.blqd;
+    final String headerJgbh =
+        loginInfo.zxbm.isNotEmpty ? loginInfo.zxbm : loginInfo.jgbh;
+    final String headerZzjgdmz =
+        loginInfo.zzjgdmz.isNotEmpty ? loginInfo.zzjgdmz : loginInfo.qycode;
     final Map<String, String> headers = <String, String>{
       'channel': headerChannel,
       'jgbh': headerJgbh,

@@ -201,9 +201,26 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
 
   String _buildInjectionScript(CheckInLocationPreset preset) {
     final String payloadJson = jsonEncode(preset.toBridgePayload());
+    final String bridgeContextJson = jsonEncode(<String, dynamic>{
+      'username': preset.loginInfo.username,
+      'userid': preset.loginInfo.userId,
+      'grbh': preset.loginInfo.grbh,
+      'zjhm': preset.loginInfo.idCard,
+      'loginToken': preset.loginInfo.loginToken,
+      'blqd': preset.loginInfo.blqd,
+      'jgbh': preset.loginInfo.jgbh,
+      'jgbm': preset.loginInfo.jgbm,
+      'zxbm': preset.loginInfo.zxbm,
+      'qycode': preset.loginInfo.qycode,
+      'zzjgdmz': preset.loginInfo.zzjgdmz,
+      'ticket': preset.ticket,
+      'cheque': preset.cheque,
+      'account': preset.loginInfo.account,
+    });
     return '''
 (() => {
   const payload = $payloadJson;
+  const bridgeContext = $bridgeContextJson;
   const postDebug = (message) => {
     try {
       window.bbtotalDebug.postMessage(message);
@@ -243,6 +260,104 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
     window.addEventListener('unhandledrejection', (event) => {
       postDebug('unhandledrejection: ' + String(event.reason || 'unknown reason'));
     });
+  };
+
+  const installNetworkHooks = () => {
+    const authHeaders = {
+      'login-token': bridgeContext.loginToken || '',
+      'channel': bridgeContext.blqd || '',
+      'blqd': bridgeContext.blqd || '',
+      'jgbh': bridgeContext.zxbm || bridgeContext.jgbh || '',
+      'zzbs': bridgeContext.zxbm || bridgeContext.jgbh || '',
+      'zzjgdmz': bridgeContext.zzjgdmz || bridgeContext.qycode || '',
+      'qycode': bridgeContext.qycode || '',
+    };
+
+    const shouldInject = (url) =>
+      typeof url === 'string' &&
+      (url.includes('appsy.jbysoft.com') || url.startsWith('/'));
+
+    const originalFetch = window.fetch ? window.fetch.bind(window) : null;
+    if (originalFetch) {
+      window.fetch = async (input, init = {}) => {
+        const requestUrl =
+          typeof input === 'string'
+            ? input
+            : (input && typeof input === 'object' && 'url' in input ? input.url : '');
+
+        let nextInit = init;
+        if (shouldInject(requestUrl)) {
+          const headers = new Headers(
+            init.headers ||
+              (input && typeof input === 'object' && 'headers' in input ? input.headers : undefined),
+          );
+          Object.entries(authHeaders).forEach(([key, value]) => {
+            if (value) headers.set(key, value);
+          });
+          nextInit = { ...init, headers };
+          if (requestUrl.includes('/tyrz/cheque/validate.service')) {
+            postDebug(
+              'fetch validate.request headers=' +
+                JSON.stringify(Object.fromEntries(headers.entries())),
+            );
+          }
+        }
+
+        const response = await originalFetch(input, nextInit);
+        if (typeof requestUrl === 'string' && requestUrl.includes('/tyrz/cheque/validate.service')) {
+          const text = await response.clone().text();
+          postDebug(
+            'fetch validate.response status=' +
+              response.status +
+              ' body=' +
+              text.slice(0, 800),
+          );
+        }
+        return response;
+      };
+    }
+
+    const originalOpen = XMLHttpRequest.prototype.open;
+    const originalSend = XMLHttpRequest.prototype.send;
+    const originalSetRequestHeader = XMLHttpRequest.prototype.setRequestHeader;
+
+    XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+      this.__bbtotalMethod = method;
+      this.__bbtotalUrl = url;
+      return originalOpen.call(this, method, url, ...rest);
+    };
+
+    XMLHttpRequest.prototype.send = function(body) {
+      const requestUrl = String(this.__bbtotalUrl || '');
+      if (shouldInject(requestUrl)) {
+        Object.entries(authHeaders).forEach(([key, value]) => {
+          if (value) {
+            try {
+              originalSetRequestHeader.call(this, key, value);
+            } catch (_) {}
+          }
+        });
+      }
+
+      if (requestUrl.includes('/tyrz/cheque/validate.service')) {
+        postDebug(
+          'xhr validate.request method=' +
+            String(this.__bbtotalMethod || '') +
+            ' url=' +
+            requestUrl,
+        );
+        this.addEventListener('load', function() {
+          postDebug(
+            'xhr validate.response status=' +
+              this.status +
+              ' body=' +
+              String(this.responseText || '').slice(0, 800),
+          );
+        });
+      }
+
+      return originalSend.call(this, body);
+    };
   };
 
   const buildWifiInfo = () => ({
@@ -345,7 +460,23 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
         window.bbgrxx = {};
       }
 
-      window.bbgrxx.blqd = window.bbgrxx.blqd || 'app_02';
+      Object.assign(window.bbgrxx, {
+        blqd: bridgeContext.blqd || 'app_02',
+        username: bridgeContext.username || '',
+        userid: bridgeContext.userid || '',
+        grbh: bridgeContext.grbh || '',
+        khbh: bridgeContext.grbh || '',
+        zjhm: bridgeContext.zjhm || '',
+        loginToken: bridgeContext.loginToken || '',
+        tyLoginToken: bridgeContext.loginToken || '',
+        jgbh: bridgeContext.jgbh || '',
+        jgbm: bridgeContext.jgbm || '',
+        zxbm: bridgeContext.zxbm || '',
+        qycode: bridgeContext.qycode || '',
+        zzjgdmz: bridgeContext.zzjgdmz || '',
+        cheque: bridgeContext.cheque || '',
+        ticket: bridgeContext.ticket || '',
+      });
       window.bbgrxx.locationMsg = payload;
       window.bbgrxx.updatingLocationMsg = payload;
 
@@ -425,6 +556,7 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
   };
 
   installConsoleHooks();
+  installNetworkHooks();
   window.__bbtotalPreset = payload;
   window.__bbtotalApplyPreset = applyPayload;
   installBridge();
