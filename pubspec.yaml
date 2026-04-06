@@ -1,0 +1,17 @@
+name: bbtotal
+description: Flutter location demo with mock location bridge.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  geolocator: ^13.0.0
+  permission_handler: ^12.0.0
+  webview_flutter: ^4.10.0
+
+flutter:
+  uses-material-design: true

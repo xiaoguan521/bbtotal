@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>NSLocationWhenInUseUsageDescription</key>
+  <string>我们需要您的位置来提供附近服务、地图定位和实时轨迹能力。</string>
+  <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+  <string>当您开启持续定位时，我们会在前后台更新位置，用于轨迹记录和位置同步。</string>
+  <key>NSLocationAlwaysUsageDescription</key>
+  <string>当您开启持续定位时，我们会在前后台更新位置，用于轨迹记录和位置同步。</string>
+  <key>UIBackgroundModes</key>
+  <array>
+    <string>location</string>
+  </array>
+</dict>
+</plist>
