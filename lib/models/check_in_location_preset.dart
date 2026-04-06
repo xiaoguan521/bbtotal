@@ -74,15 +74,38 @@ class CheckInLocationPreset {
   }
 
   Uri buildCheckInUri(String baseUrl) {
-    final Uri baseUri = Uri.parse(baseUrl);
-    final Map<String, String> queryParameters =
-        Map<String, String>.from(baseUri.queryParameters);
+    final int hashIndex = baseUrl.indexOf('#');
+    if (hashIndex == -1) {
+      final Uri baseUri = Uri.parse(baseUrl);
+      final Map<String, String> queryParameters =
+          Map<String, String>.from(baseUri.queryParameters);
+      _applyDynamicParameters(queryParameters);
+      return baseUri.replace(queryParameters: queryParameters);
+    }
 
+    final String prefix = baseUrl.substring(0, hashIndex + 1);
+    final String fragment = baseUrl.substring(hashIndex + 1);
+    final Uri fragmentUri = Uri.parse('https://placeholder$fragment');
+    final Map<String, String> queryParameters =
+        Map<String, String>.from(fragmentUri.queryParameters);
+
+    _applyDynamicParameters(queryParameters);
+
+    final Uri updatedFragmentUri = fragmentUri.replace(
+      queryParameters: queryParameters,
+    );
+    final String rebuilt = '$prefix${updatedFragmentUri.path}'
+        '${updatedFragmentUri.hasQuery ? '?${updatedFragmentUri.query}' : ''}';
+    return Uri.parse(rebuilt);
+  }
+
+  void _applyDynamicParameters(Map<String, String> queryParameters) {
     queryParameters['tyLoginToken'] = loginInfo.loginToken;
     queryParameters['userid'] = loginInfo.userId.toString();
     queryParameters['dx_29_sjdxsl'] = loginInfo.userId.toString();
     queryParameters['khbh'] = loginInfo.grbh;
     queryParameters['zjhm'] = loginInfo.idCard;
+
     if (loginInfo.jgbm.isNotEmpty) {
       queryParameters['jgbm'] = loginInfo.jgbm;
     }
@@ -97,17 +120,9 @@ class CheckInLocationPreset {
     if (loginInfo.zzjgdmz.isNotEmpty) {
       queryParameters['zzjgdmz'] = loginInfo.zzjgdmz;
     }
-    if (loginInfo.ticket.isNotEmpty) {
-      queryParameters['ticket'] = loginInfo.ticket;
-    }
-    if (ticket.isNotEmpty) {
-      queryParameters['ticket'] = ticket;
-    }
     if (cheque.isNotEmpty) {
       queryParameters['cheque'] = cheque;
     }
-
-    return baseUri.replace(queryParameters: queryParameters);
   }
 
   Map<String, dynamic> toBridgePayload() {
