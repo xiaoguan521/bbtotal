@@ -205,6 +205,10 @@ class _CheckInLocationSetupPageState extends State<CheckInLocationSetupPage> {
       }
     }
 
+    if (!mounted) {
+      return;
+    }
+
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => CheckInWebViewPage(preset: resolvedPreset),
