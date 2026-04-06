@@ -23,6 +23,7 @@ class CheckInWebViewPage extends StatefulWidget {
 class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
   late final Uri _resolvedUri =
       widget.preset.buildCheckInUri(CheckInWebViewPage.inspectedCheckInUrl);
+  bool _hideNativeChrome = false;
   late final WebViewController _controller =
       WebViewController()
         ..setJavaScriptMode(JavaScriptMode.unrestricted)
@@ -33,7 +34,48 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
               return;
             }
             setState(() {
-              _pageDiagnostics = message.message;
+              _appendDiagnostic(message.message);
+            });
+          },
+        )
+        ..addJavaScriptChannel(
+          'bbtotalBridgeControl',
+          onMessageReceived: (JavaScriptMessage message) async {
+            if (!mounted) {
+              return;
+            }
+
+            final Map<String, dynamic>? command = _decodeCommand(message.message);
+            if (command == null) {
+              return;
+            }
+
+            final String type = (command['type'] ?? '').toString();
+            if (type == 'hiddenTitle') {
+              setState(() {
+                _hideNativeChrome = true;
+                _status = 'Native title hidden by H5 bridge request.';
+              });
+            } else if (type == 'showTitle') {
+              setState(() {
+                _hideNativeChrome = false;
+                _status = 'Native title shown by H5 bridge request.';
+              });
+            } else if (type == 'openUrl') {
+              final String url = (command['url'] ?? '').toString();
+              setState(() {
+                _status = 'H5 requested openUrl: $url';
+              });
+            } else if (type == 'pop') {
+              if (Navigator.of(context).canPop()) {
+                Navigator.of(context).pop();
+              }
+            } else if (type == 'reload') {
+              await _controller.reload();
+            }
+            _appendDiagnostic('bridge-control: ${message.message}');
+            setState(() {
+              _pageDiagnostics = _pageDiagnostics;
             });
           },
         )
@@ -70,6 +112,29 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
   String _pageDiagnostics = 'No page diagnostics yet.';
   String _status = 'Opening check-in page...';
 
+  void _appendDiagnostic(String message) {
+    final String current = _pageDiagnostics == 'No page diagnostics yet.'
+        ? ''
+        : _pageDiagnostics;
+    final String next = current.isEmpty ? message : '$current\n$message';
+    _pageDiagnostics = next;
+  }
+
+  Map<String, dynamic>? _decodeCommand(String raw) {
+    try {
+      final Object decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+      if (decoded is Map) {
+        return decoded.map(
+          (key, dynamic value) => MapEntry(key.toString(), value),
+        );
+      }
+    } catch (_) {}
+    return null;
+  }
+
   Future<void> _injectPresetIntoPage() async {
     try {
       await _controller.runJavaScript(_buildInjectionScript(widget.preset));
@@ -79,7 +144,7 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
 
       setState(() {
         _isLoading = false;
-        _status = 'Preset location injected into the H5 check-in page.';
+        _status = 'Location bridge installed. Waiting for the H5 page to request location.';
       });
     } catch (error) {
       if (!mounted) {
@@ -139,6 +204,140 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
     return '''
 (() => {
   const payload = $payloadJson;
+  const postDebug = (message) => {
+    try {
+      window.bbtotalDebug.postMessage(message);
+    } catch (_) {}
+  };
+  const postBridgeControl = (command) => {
+    try {
+      window.bbtotalBridgeControl.postMessage(JSON.stringify(command));
+    } catch (_) {}
+  };
+
+  const installConsoleHooks = () => {
+    const wrap = (level) => {
+      const original = console[level];
+      console[level] = (...args) => {
+        postDebug('console.' + level + ': ' + args.map((item) => {
+          try {
+            return typeof item === 'string' ? item : JSON.stringify(item);
+          } catch (_) {
+            return String(item);
+          }
+        }).join(' '));
+        if (original) {
+          original.apply(console, args);
+        }
+      };
+    };
+
+    wrap('log');
+    wrap('warn');
+    wrap('error');
+
+    window.addEventListener('error', (event) => {
+      postDebug('window.onerror: ' + (event.message || 'unknown error'));
+    });
+
+    window.addEventListener('unhandledrejection', (event) => {
+      postDebug('unhandledrejection: ' + String(event.reason || 'unknown reason'));
+    });
+  };
+
+  const buildWifiInfo = () => ({
+    ssid: '',
+    bssid: '',
+    wifiName: '',
+    wifiMac: '',
+    isWifi: false,
+    device: 'flutter-webview',
+  });
+
+  const handleCommand = (input) => {
+    let command = input;
+    try {
+      if (typeof input === 'string') {
+        command = JSON.parse(input);
+      }
+    } catch (_) {}
+
+    if (!command || typeof command !== 'object') {
+      postDebug('bbtotal bridge -> unsupported command: ' + String(input));
+      return '';
+    }
+
+    const type = command.type || command.function || '';
+    if (type === 'getLocation' || type === 'getUpdatingLocation') {
+      postDebug('bbtotal bridge -> command ' + type);
+      applyPayload();
+      return JSON.stringify(payload);
+    }
+
+    if (type === 'hiddenTitle') {
+      postDebug('bbtotal bridge -> hiddenTitle()');
+      postBridgeControl({ type: 'hiddenTitle' });
+      return '';
+    }
+
+    if (type === 'config') {
+      postDebug('bbtotal bridge -> config ' + JSON.stringify(command));
+      if (command.hideNav === 'YES' || command.hideNav === true) {
+        postBridgeControl({ type: 'hiddenTitle' });
+      } else if (command.hideNav === 'NO' || command.hideNav === false) {
+        postBridgeControl({ type: 'showTitle' });
+      }
+      return '';
+    }
+
+    if (type === 'getWifiinfo') {
+      const wifiInfo = buildWifiInfo();
+      postDebug('bbtotal bridge -> getWifiinfo() ' + JSON.stringify(wifiInfo));
+      if (typeof window.getWifiinfoResult === 'function') {
+        window.getWifiinfoResult(JSON.stringify(wifiInfo));
+      }
+      return JSON.stringify(wifiInfo);
+    }
+
+    if (command.push || command.pushURL) {
+      postDebug('bbtotal bridge -> push ' + JSON.stringify(command));
+      return '';
+    }
+
+    if (command.pop) {
+      postDebug('bbtotal bridge -> pop ' + JSON.stringify(command));
+      postBridgeControl({ type: 'pop' });
+      return '';
+    }
+
+    if (command.openUrl) {
+      postDebug('bbtotal bridge -> openUrl ' + command.openUrl);
+      postBridgeControl({ type: 'openUrl', url: command.openUrl });
+      return '';
+    }
+
+    if (type === 'reloadData') {
+      postDebug('bbtotal bridge -> reloadData');
+      postBridgeControl({ type: 'reload' });
+      return '';
+    }
+
+    if (type === 'launchMiniProgram') {
+      postDebug('bbtotal bridge -> launchMiniProgram ' + JSON.stringify(command));
+      return '';
+    }
+
+    if (type === 'yuyueMeeting' ||
+        type === 'endMeeting' ||
+        type === 'joinyuyueMeeting' ||
+        type === 'joinyuyueZhibo') {
+      postDebug('bbtotal bridge -> native meeting action ' + JSON.stringify(command));
+      return '';
+    }
+
+    postDebug('bbtotal bridge -> passthrough command ' + JSON.stringify(command));
+    return '';
+  };
 
   const applyPayload = () => {
     try {
@@ -146,6 +345,7 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
         window.bbgrxx = {};
       }
 
+      window.bbgrxx.blqd = window.bbgrxx.blqd || 'app_02';
       window.bbgrxx.locationMsg = payload;
       window.bbgrxx.updatingLocationMsg = payload;
 
@@ -164,16 +364,18 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
 
       if (typeof window.locationResult === 'function') {
         window.locationResult(payload);
+        postDebug('bbtotal applyPayload -> window.locationResult(payload)');
       } else if (
         window.onBasicFormRef &&
         typeof window.onBasicFormRef.updateGhsxLoaction === 'function'
       ) {
         window.onBasicFormRef.updateGhsxLoaction();
+        postDebug('bbtotal applyPayload -> updateGhsxLoaction()');
       }
 
       return true;
     } catch (error) {
-      console.log('bbtotal applyPayload error', error);
+      postDebug('bbtotal applyPayload error: ' + String(error));
       return false;
     }
   };
@@ -181,48 +383,52 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
   const installBridge = () => {
     window.__bbtotalPreset = payload;
     window.__bbtotalApplyPreset = applyPayload;
+    window.__bbtotalHandleNativeCommand = handleCommand;
 
     window.SYAppModel = window.SYAppModel || {};
     window.SYAppModel.getLocation = () => {
+      postDebug('bbtotal bridge -> SYAppModel.getLocation()');
       applyPayload();
       return JSON.stringify(payload);
     };
     window.SYAppModel.getUpdatingLocation = () => {
+      postDebug('bbtotal bridge -> SYAppModel.getUpdatingLocation()');
       applyPayload();
       return JSON.stringify(payload);
     };
+    window.SYAppModel.postMessage = (message) => handleCommand(message);
+    window.SYAppModel.hiddenTitle = () => handleCommand({ type: 'hiddenTitle' });
+    window.SYAppModel.hideNav = (hidden) =>
+      handleCommand({ function: 'config', hideNav: hidden ? 'YES' : 'NO' });
+    window.SYAppModel.getWifiinfo = () => handleCommand({ type: 'getWifiinfo' });
+    window.SYAppModel.openUrl = (url) => handleCommand({ openUrl: url });
+    window.SYAppModel.reloadData = () => handleCommand({ function: 'reloadData' });
+    window.SYAppModel.yuyueMeeting = (message) => handleCommand({ type: 'yuyueMeeting', params: message });
+    window.SYAppModel.endMeeting = (message) => handleCommand({ type: 'endMeeting', params: message });
+    window.SYAppModel.joinyuyueMeeting = (message) => handleCommand({ type: 'joinyuyueMeeting', params: message });
+    window.SYAppModel.joinyuyueZhibo = (message) => handleCommand({ type: 'joinyuyueZhibo', params: message });
 
     window.webkit = window.webkit || {};
     window.webkit.messageHandlers = window.webkit.messageHandlers || {};
     window.webkit.messageHandlers.SYAppModel = {
-      postMessage: (message) => {
-        let type = '';
-        try {
-          if (typeof message === 'string') {
-            type = JSON.parse(message).type || '';
-          } else if (message && typeof message === 'object') {
-            type = message.type || '';
-          }
-        } catch (_) {}
+      postMessage: (message) => handleCommand(message),
+    };
 
-        if (!type || type === 'getLocation' || type === 'getUpdatingLocation') {
-          applyPayload();
-        }
-      },
+    const originalPrompt = window.prompt ? window.prompt.bind(window) : null;
+    window.prompt = (message, defaultValue) => {
+      if (typeof message === 'string' && message.includes('launchMiniProgram')) {
+        handleCommand(message);
+        return '';
+      }
+      return originalPrompt ? originalPrompt(message, defaultValue) : '';
     };
   };
 
+  installConsoleHooks();
+  window.__bbtotalPreset = payload;
+  window.__bbtotalApplyPreset = applyPayload;
   installBridge();
-  applyPayload();
-
-  let attempts = 0;
-  const timer = setInterval(() => {
-    attempts += 1;
-    const done = applyPayload();
-    if (done || attempts >= 20) {
-      clearInterval(timer);
-    }
-  }, 600);
+  postDebug('bbtotal bridge installed');
 })();
 ''';
   }
@@ -230,23 +436,35 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('打卡页面'),
-        actions: <Widget>[
-          IconButton(
-            tooltip: '重新注入定位',
-            onPressed: _injectPresetIntoPage,
-            icon: const Icon(Icons.my_location_outlined),
-          ),
-          IconButton(
-            tooltip: '刷新页面',
-            onPressed: () {
-              _controller.reload();
-            },
-            icon: const Icon(Icons.refresh),
-          ),
-        ],
-      ),
+      appBar: _hideNativeChrome
+          ? null
+          : AppBar(
+              title: const Text('打卡页面'),
+              actions: <Widget>[
+                IconButton(
+                  tooltip: '手动注入定位',
+                  onPressed: () async {
+                    await _controller.runJavaScript(
+                      'window.__bbtotalApplyPreset && window.__bbtotalApplyPreset();',
+                    );
+                    if (!mounted) {
+                      return;
+                    }
+                    setState(() {
+                      _status = 'Manual location injection triggered.';
+                    });
+                  },
+                  icon: const Icon(Icons.my_location_outlined),
+                ),
+                IconButton(
+                  tooltip: '刷新页面',
+                  onPressed: () {
+                    _controller.reload();
+                  },
+                  icon: const Icon(Icons.refresh),
+                ),
+              ],
+            ),
       body: Column(
         children: <Widget>[
           Material(
