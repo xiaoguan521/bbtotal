@@ -15,6 +15,8 @@ param(
     [string]$AndroidSdkRoot = 'E:\Android\sdk',
     [string]$GradleUserHome = '',
     [string]$SharedGradleCacheHome = 'D:\program\Java\repository\gradle-flutter-mcp-studio',
+    [string]$ProxyHost = '127.0.0.1',
+    [string]$ProxyPort = '10808',
     [string]$LogPath = '',
 
     [switch]$SkipClean,
@@ -106,6 +108,36 @@ function Ensure-Junction {
     New-Item -ItemType Junction -Path $LinkPath -Target $TargetPath | Out-Null
 }
 
+function Write-LocalGradleProperties {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$LocalGradleHome,
+
+        [string]$ProxyHost,
+
+        [string]$ProxyPort
+    )
+
+    $gradlePropertiesPath = Join-Path $LocalGradleHome 'gradle.properties'
+    $lines = @()
+
+    if (-not [string]::IsNullOrWhiteSpace($ProxyHost) -and -not [string]::IsNullOrWhiteSpace($ProxyPort)) {
+        $lines += "systemProp.http.proxyHost=$ProxyHost"
+        $lines += "systemProp.http.proxyPort=$ProxyPort"
+        $lines += "systemProp.https.proxyHost=$ProxyHost"
+        $lines += "systemProp.https.proxyPort=$ProxyPort"
+        $lines += 'systemProp.http.nonProxyHosts=localhost|127.0.0.1|::1'
+        $lines += 'systemProp.https.nonProxyHosts=localhost|127.0.0.1|::1'
+    }
+
+    if ($lines.Count -eq 0) {
+        Remove-Item -LiteralPath $gradlePropertiesPath -Force -ErrorAction SilentlyContinue
+        return
+    }
+
+    Set-Content -LiteralPath $gradlePropertiesPath -Value $lines -Encoding ASCII
+}
+
 function Prepare-GradleUserHome {
     param(
         [Parameter(Mandatory = $true)]
@@ -114,7 +146,11 @@ function Prepare-GradleUserHome {
         [Parameter(Mandatory = $true)]
         [string]$MirrorScriptPath,
 
-        [string]$SharedGradleHome
+        [string]$SharedGradleHome,
+
+        [string]$ProxyHost,
+
+        [string]$ProxyPort
     )
 
     Ensure-Directory -Path $LocalGradleHome
@@ -123,6 +159,7 @@ function Prepare-GradleUserHome {
     Ensure-Directory -Path (Join-Path $LocalGradleHome 'init.d')
 
     Copy-Item -LiteralPath $MirrorScriptPath -Destination (Join-Path $LocalGradleHome 'init.d\repository-mirrors.init.gradle') -Force
+    Write-LocalGradleProperties -LocalGradleHome $LocalGradleHome -ProxyHost $ProxyHost -ProxyPort $ProxyPort
 
     if (-not [string]::IsNullOrWhiteSpace($SharedGradleHome) -and (Test-Path -LiteralPath $SharedGradleHome -PathType Container)) {
         Ensure-Junction -LinkPath (Join-Path $LocalGradleHome 'wrapper\dists') -TargetPath (Join-Path $SharedGradleHome 'wrapper\dists')
@@ -140,7 +177,9 @@ $env:GRADLE_USER_HOME = $GradleUserHome
 Prepare-GradleUserHome `
     -LocalGradleHome $env:GRADLE_USER_HOME `
     -SharedGradleHome $SharedGradleCacheHome `
-    -MirrorScriptPath (Join-Path $projectDir 'android\repository-mirrors.init.gradle')
+    -MirrorScriptPath (Join-Path $projectDir 'android\repository-mirrors.init.gradle') `
+    -ProxyHost $ProxyHost `
+    -ProxyPort $ProxyPort
 
 function Assert-Directory {
     param(
@@ -222,6 +261,8 @@ Write-Host "PUB_CACHE       : $env:PUB_CACHE"
 Write-Host "ANDROID_SDK_ROOT: $env:ANDROID_SDK_ROOT"
 Write-Host "GRADLE_USER_HOME: $env:GRADLE_USER_HOME"
 Write-Host "GRADLE_SHARED   : $SharedGradleCacheHome"
+Write-Host "ProxyHost       : $ProxyHost"
+Write-Host "ProxyPort       : $ProxyPort"
 Write-Host "LogPath         : $LogPath"
 
 Write-Log "ProjectDir      : $projectDir"
@@ -235,6 +276,8 @@ Write-Log "PUB_CACHE       : $env:PUB_CACHE"
 Write-Log "ANDROID_SDK_ROOT: $env:ANDROID_SDK_ROOT"
 Write-Log "GRADLE_USER_HOME: $env:GRADLE_USER_HOME"
 Write-Log "GRADLE_SHARED   : $SharedGradleCacheHome"
+Write-Log "ProxyHost       : $ProxyHost"
+Write-Log "ProxyPort       : $ProxyPort"
 Write-Log "LogPath         : $LogPath"
 
 Invoke-LoggedCommand -Label 'java -version' -Command {
