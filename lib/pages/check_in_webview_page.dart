@@ -187,14 +187,14 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
         return;
       }
       setState(() {
-        _pageDiagnostics = normalized;
+        _appendDiagnostic('page-snapshot: $normalized');
       });
     } catch (error) {
       if (!mounted) {
         return;
       }
       setState(() {
-        _pageDiagnostics = 'Collect diagnostics failed: $error';
+        _appendDiagnostic('collect-diagnostics failed: $error');
       });
     }
   }
@@ -580,7 +580,14 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
       if (typeof window.getUserinfoResult === 'function') {
         window.getUserinfoResult(JSON.stringify(userinfoResult));
       }
+      if (typeof window.getUserInfoResult === 'function') {
+        window.getUserInfoResult(JSON.stringify(userinfoResult));
+      }
       return JSON.stringify(userinfoResult);
+    }
+
+    if (type === 'getUserInfo') {
+      return handleCommand({ type: 'getUserinfo' });
     }
 
     if (command.push || command.pushURL) {
@@ -646,6 +653,7 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
         cheque: bridgeContext.cheque || '',
         ticket: bridgeContext.ticket || '',
         zzjgxx: (zzjgxx && Object.keys(zzjgxx).length) ? zzjgxx : (window.bbgrxx.zzjgxx || {}),
+        userinfo: buildUserinfoResult(),
       });
       window.bbgrxx.locationMsg = payload;
       window.bbgrxx.updatingLocationMsg = payload;
@@ -702,6 +710,7 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
     window.SYAppModel.hideNav = (hidden) =>
       handleCommand({ function: 'config', hideNav: hidden ? 'YES' : 'NO' });
     window.SYAppModel.getUserinfo = () => handleCommand({ type: 'getUserinfo' });
+    window.SYAppModel.getUserInfo = () => handleCommand({ type: 'getUserInfo' });
     window.SYAppModel.getWifiinfo = () => handleCommand({ type: 'getWifiinfo' });
     window.SYAppModel.openUrl = (url) => handleCommand({ openUrl: url });
     window.SYAppModel.reloadData = () => handleCommand({ function: 'reloadData' });
@@ -715,6 +724,11 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
     window.webkit.messageHandlers.SYAppModel = {
       postMessage: (message) => handleCommand(message),
     };
+
+    window.android = window.SYAppModel;
+    window.Android = window.SYAppModel;
+    window.appModel = window.SYAppModel;
+    window.AppModel = window.SYAppModel;
 
     const originalPrompt = window.prompt ? window.prompt.bind(window) : null;
     window.prompt = (message, defaultValue) => {
