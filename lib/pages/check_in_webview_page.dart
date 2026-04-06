@@ -49,7 +49,7 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
             },
           ),
         )
-        ..loadRequest(Uri.parse(CheckInWebViewPage.inspectedCheckInUrl));
+        ..loadRequest(widget.preset.buildCheckInUri(CheckInWebViewPage.inspectedCheckInUrl));
 
   bool _isLoading = true;
   String _status = 'Opening check-in page...';
@@ -198,7 +198,10 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
               dense: true,
               leading: const Icon(Icons.place_outlined),
               title: Text(widget.preset.address),
-              subtitle: Text(widget.preset.coordinateText),
+              subtitle: Text(
+                '${widget.preset.loginInfo.username} | '
+                '${widget.preset.coordinateText}',
+              ),
               trailing: _isLoading
                   ? const SizedBox(
                       width: 20,

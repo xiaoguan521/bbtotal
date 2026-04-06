@@ -11,8 +11,6 @@ pluginManagement {
     includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
 
     repositories {
-        maven("https://maven.aliyun.com/repository/gradle-plugin")
-        maven("https://maven.aliyun.com/nexus/content/groups/public")
         google()
         mavenCentral()
         gradlePluginPortal()
