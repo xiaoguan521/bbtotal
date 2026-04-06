@@ -82,20 +82,30 @@ jobs:
         run: |
           if [ ! -d ios/Runner.xcodeproj ]; then
             mkdir -p .ci-ios-backup/Runner
+            mkdir -p .ci-ios-backup/test
             if [ -f ios/Runner/AppDelegate.swift ]; then
               cp ios/Runner/AppDelegate.swift .ci-ios-backup/Runner/AppDelegate.swift
             fi
             if [ -f ios/Runner/Info.plist ]; then
               cp ios/Runner/Info.plist .ci-ios-backup/Runner/Info.plist
             fi
+            if [ -f test/widget_test.dart ]; then
+              cp test/widget_test.dart .ci-ios-backup/test/widget_test.dart
+            fi
 
-            flutter create . --platforms=ios --org com.example
+            flutter create . --platforms=ios --org com.example --no-pub
 
             if [ -f .ci-ios-backup/Runner/AppDelegate.swift ]; then
               cp .ci-ios-backup/Runner/AppDelegate.swift ios/Runner/AppDelegate.swift
             fi
             if [ -f .ci-ios-backup/Runner/Info.plist ]; then
               cp .ci-ios-backup/Runner/Info.plist ios/Runner/Info.plist
+            fi
+            if [ -f .ci-ios-backup/test/widget_test.dart ]; then
+              mkdir -p test
+              cp .ci-ios-backup/test/widget_test.dart test/widget_test.dart
+            else
+              rm -f test/widget_test.dart
             fi
           fi
 
