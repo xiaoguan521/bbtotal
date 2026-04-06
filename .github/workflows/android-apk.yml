@@ -10,9 +10,9 @@ on:
       - main
 
 jobs:
-  build-android-apk:
+  analyze:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 20
     env:
       GRADLE_OPTS: -Dorg.gradle.vfs.watch=false
 
@@ -47,6 +47,41 @@ jobs:
       - name: Flutter Analyze
         run: flutter analyze
 
+  build-android-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: analyze
+    env:
+      GRADLE_OPTS: -Dorg.gradle.vfs.watch=false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set Up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Set Up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Cache Pub Packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: ${{ runner.os }}-pub-${{ hashFiles('pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pub-
+
+      - name: Flutter Pub Get
+        run: flutter pub get
+
       - name: Build Android APK
         run: flutter build apk
 
@@ -60,6 +95,7 @@ jobs:
   build-ios-test-package:
     runs-on: macos-latest
     timeout-minutes: 60
+    needs: analyze
 
     steps:
       - name: Checkout
@@ -117,11 +153,18 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pub-
 
+      - name: Cache CocoaPods
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cocoapods
+            ~/Library/Caches/CocoaPods
+          key: ${{ runner.os }}-cocoapods-${{ hashFiles('pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cocoapods-
+
       - name: Flutter Pub Get
         run: flutter pub get
-
-      - name: Flutter Analyze
-        run: flutter analyze
 
       - name: Build iOS Test Package
         run: flutter build ios --release --no-codesign
