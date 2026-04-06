@@ -21,9 +21,22 @@ class CheckInWebViewPage extends StatefulWidget {
 }
 
 class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
+  late final Uri _resolvedUri =
+      widget.preset.buildCheckInUri(CheckInWebViewPage.inspectedCheckInUrl);
   late final WebViewController _controller =
       WebViewController()
         ..setJavaScriptMode(JavaScriptMode.unrestricted)
+        ..addJavaScriptChannel(
+          'bbtotalDebug',
+          onMessageReceived: (JavaScriptMessage message) {
+            if (!mounted) {
+              return;
+            }
+            setState(() {
+              _pageDiagnostics = message.message;
+            });
+          },
+        )
         ..setNavigationDelegate(
           NavigationDelegate(
             onPageStarted: (String url) {
@@ -37,6 +50,8 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
             },
             onPageFinished: (String url) async {
               await _injectPresetIntoPage();
+              await Future<void>.delayed(const Duration(seconds: 1));
+              await _collectPageDiagnostics();
             },
             onWebResourceError: (WebResourceError error) {
               if (!mounted) {
@@ -49,9 +64,10 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
             },
           ),
         )
-        ..loadRequest(widget.preset.buildCheckInUri(CheckInWebViewPage.inspectedCheckInUrl));
+        ..loadRequest(_resolvedUri);
 
   bool _isLoading = true;
+  String _pageDiagnostics = 'No page diagnostics yet.';
   String _status = 'Opening check-in page...';
 
   Future<void> _injectPresetIntoPage() async {
@@ -73,6 +89,47 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
       setState(() {
         _isLoading = false;
         _status = 'Injection failed: $error';
+      });
+    }
+  }
+
+  Future<void> _collectPageDiagnostics() async {
+    try {
+      final Object result = await _controller.runJavaScriptReturningResult('''
+(() => {
+  const bodyText = document.body ? document.body.innerText : '';
+  const candidates = Array.from(document.querySelectorAll('div, span, p, button, a'))
+    .map((el) => (el.innerText || '').trim())
+    .filter((text) => text && (
+      text.includes('失败') ||
+      text.includes('错误') ||
+      text.includes('重试') ||
+      text.includes('异常')
+    ));
+
+  return JSON.stringify({
+    href: location.href,
+    title: document.title,
+    bodyText: bodyText.slice(0, 1200),
+    candidateErrors: candidates.slice(0, 12),
+  });
+})();
+''');
+
+      final String raw = result.toString();
+      final String normalized = raw.startsWith('"') ? jsonDecode(raw) as String : raw;
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _pageDiagnostics = normalized;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _pageDiagnostics = 'Collect diagnostics failed: $error';
       });
     }
   }
@@ -223,6 +280,17 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
                 ],
               ),
             ),
+          ),
+          ExpansionTile(
+            title: const Text('诊断信息'),
+            subtitle: const Text('查看最终 URL 和页面错误内容'),
+            childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            children: <Widget>[
+              SelectableText(
+                'Final URL:\n${_resolvedUri.toString()}\n\n'
+                'Diagnostics:\n$_pageDiagnostics',
+              ),
+            ],
           ),
           Expanded(
             child: WebViewWidget(controller: _controller),

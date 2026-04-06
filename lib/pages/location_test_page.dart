@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../models/check_in_location_preset.dart';
+import '../models/check_in_history_location.dart';
 import '../models/user_login_info.dart';
 import 'check_in_webview_page.dart';
 import '../services/cheque_service.dart';
+import '../services/check_in_history_service.dart';
 import '../services/location_service.dart';
 import '../services/user_login_info_service.dart';
 
@@ -19,7 +21,7 @@ class CheckInLocationSetupPage extends StatefulWidget {
 
 class _CheckInLocationSetupPageState extends State<CheckInLocationSetupPage> {
   late final TextEditingController _usernameController =
-      TextEditingController(text: '刘晓晨');
+      TextEditingController();
   late final TextEditingController _addressController =
       TextEditingController(text: '河北省石家庄市鹿泉区御园路71号靠近光谷科技园');
   late final TextEditingController _longitudeController =
@@ -29,9 +31,12 @@ class _CheckInLocationSetupPageState extends State<CheckInLocationSetupPage> {
 
   final LocationService _locationService = LocationService();
   final ChequeService _chequeService = ChequeService();
+  final CheckInHistoryService _checkInHistoryService = CheckInHistoryService();
   final UserLoginInfoService _userLoginInfoService = UserLoginInfoService();
 
+  List<CheckInHistoryLocation> _historyLocations = <CheckInHistoryLocation>[];
   UserLoginInfo? _loginInfo;
+  bool _isLoadingHistory = false;
   bool _isResolvingLoginInfo = false;
   String _status = 'Ready to configure the clock-in location.';
 
@@ -100,6 +105,7 @@ class _CheckInLocationSetupPageState extends State<CheckInLocationSetupPage> {
         _loginInfo = loginInfo;
         _status = '已获取 ${loginInfo.qdmc ?? loginInfo.blqd} 的登录 token。';
       });
+      unawaited(_fetchRecentHistoryLocations(loginInfo: loginInfo));
       return loginInfo;
     } on UserLoginInfoServiceException catch (error) {
       if (!mounted) {
@@ -135,6 +141,78 @@ class _CheckInLocationSetupPageState extends State<CheckInLocationSetupPage> {
         });
       }
     }
+  }
+
+  Future<void> _fetchRecentHistoryLocations({
+    UserLoginInfo? loginInfo,
+  }) async {
+    final UserLoginInfo? resolvedLoginInfo = loginInfo ?? _loginInfo;
+    if (resolvedLoginInfo == null) {
+      setState(() {
+        _status = '请先查询移动端 Token，再加载历史打卡位置。';
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoadingHistory = true;
+      _status = '正在查询最近5天的历史打卡位置...';
+    });
+
+    try {
+      final List<CheckInHistoryLocation> items = await _checkInHistoryService
+          .fetchRecentLocations(resolvedLoginInfo);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _historyLocations = items;
+        _status = items.isEmpty
+            ? '最近5天没有查询到可用的历史打卡位置。'
+            : '已加载最近5天内的 ${items.length} 个历史打卡位置。';
+      });
+    } on CheckInHistoryServiceException catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _status = error.message;
+      });
+    } on TimeoutException {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _status = '历史打卡位置查询超时，请稍后重试。';
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _status = '历史打卡位置查询失败：$error';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingHistory = false;
+        });
+      }
+    }
+  }
+
+  void _applyHistoryLocation(CheckInHistoryLocation item) {
+    if (item.longitude == null || item.latitude == null) {
+      return;
+    }
+
+    _addressController.text = item.address;
+    _longitudeController.text = item.longitude!.toString();
+    _latitudeController.text = item.latitude!.toString();
+
+    setState(() {
+      _status = '已使用历史打卡位置：${item.address}';
+    });
   }
 
   Future<void> _openCheckInPage() async {
@@ -188,19 +266,29 @@ class _CheckInLocationSetupPageState extends State<CheckInLocationSetupPage> {
     } on ChequeServiceException catch (error) {
       if (mounted) {
         setState(() {
-          _status = 'cheque / ticket 查询失败，使用现有 URL 参数继续打开：${error.message}';
+          final String debugText =
+              _chequeService.lastDebugInfo?.toMultilineText() ?? '';
+          _status = 'cheque / ticket 查询失败，使用现有 URL 参数继续打开：'
+              '${error.message}'
+              '${debugText.isEmpty ? '' : '\n\n$debugText'}';
         });
       }
     } on TimeoutException {
       if (mounted) {
         setState(() {
-          _status = 'cheque / ticket 查询超时，使用现有 URL 参数继续打开。';
+          final String debugText =
+              _chequeService.lastDebugInfo?.toMultilineText() ?? '';
+          _status = 'cheque / ticket 查询超时，使用现有 URL 参数继续打开。'
+              '${debugText.isEmpty ? '' : '\n\n$debugText'}';
         });
       }
     } catch (error) {
       if (mounted) {
         setState(() {
-          _status = 'cheque / ticket 查询失败，使用现有 URL 参数继续打开：$error';
+          final String debugText =
+              _chequeService.lastDebugInfo?.toMultilineText() ?? '';
+          _status = 'cheque / ticket 查询失败，使用现有 URL 参数继续打开：$error'
+              '${debugText.isEmpty ? '' : '\n\n$debugText'}';
         });
       }
     }
@@ -220,6 +308,7 @@ class _CheckInLocationSetupPageState extends State<CheckInLocationSetupPage> {
   void dispose() {
     _locationService.lastError.removeListener(_syncErrorState);
     _chequeService.dispose();
+    _checkInHistoryService.dispose();
     _locationService.dispose();
     _userLoginInfoService.dispose();
     _usernameController.dispose();
@@ -276,6 +365,7 @@ class _CheckInLocationSetupPageState extends State<CheckInLocationSetupPage> {
                     controller: _usernameController,
                     decoration: const InputDecoration(
                       labelText: '姓名',
+                      hintText: '请输入姓名',
                       border: OutlineInputBorder(),
                     ),
                   ),
@@ -366,6 +456,13 @@ class _CheckInLocationSetupPageState extends State<CheckInLocationSetupPage> {
                 label: Text(_isResolvingLoginInfo ? '查询中...' : '查询移动端Token'),
               ),
               FilledButton.icon(
+                onPressed: _isLoadingHistory
+                    ? null
+                    : () => _fetchRecentHistoryLocations(),
+                icon: const Icon(Icons.history),
+                label: Text(_isLoadingHistory ? '查询中...' : '最近5天历史位置'),
+              ),
+              FilledButton.icon(
                 onPressed: _fillWithCurrentCoordinates,
                 icon: const Icon(Icons.gps_fixed),
                 label: const Text('使用当前坐标'),
@@ -377,6 +474,47 @@ class _CheckInLocationSetupPageState extends State<CheckInLocationSetupPage> {
               ),
             ],
           ),
+          if (_historyLocations.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 12),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text('最近5天打卡位置', style: theme.textTheme.titleMedium),
+                    const SizedBox(height: 4),
+                    Text(
+                      '仅展示当前用户最近5天内的可用打卡位置',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 12),
+                    ..._historyLocations.map(
+                      (CheckInHistoryLocation item) => Column(
+                        children: <Widget>[
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(item.address),
+                            subtitle: Text(
+                              '${item.timeText}\n'
+                              '${item.coordinateText}\n'
+                              '${item.deviceName.isEmpty ? '未知设备' : item.deviceName}',
+                            ),
+                            isThreeLine: true,
+                            trailing: FilledButton.tonal(
+                              onPressed: () => _applyHistoryLocation(item),
+                              child: const Text('使用'),
+                            ),
+                          ),
+                          if (item != _historyLocations.last) const Divider(),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

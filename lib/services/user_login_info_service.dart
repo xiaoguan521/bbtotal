@@ -68,13 +68,27 @@ class UserLoginInfoService {
       }
     }
 
+    UserLoginInfo? desktopDetail;
+    if (desktopLoginInfo != null) {
+      try {
+        desktopDetail = await _fetchUserInfoViaToken(desktopLoginInfo);
+      } catch (_) {
+        desktopDetail = desktopLoginInfo;
+      }
+    }
+
     for (final UserLoginInfo item in loginInfos) {
       if (item.isMobileApp) {
-        return _fetchUserInfoViaToken(
-          item.copyWith(
-            desktopChannel: desktopLoginInfo?.blqd ?? '',
-            desktopLoginToken: desktopLoginInfo?.loginToken ?? '',
-          ),
+        final UserLoginInfo mobileDetail = await _fetchUserInfoViaToken(item);
+        return mobileDetail.copyWith(
+          desktopChannel: desktopDetail?.blqd ?? desktopLoginInfo?.blqd ?? '',
+          desktopJgbh: desktopDetail?.jgbh ?? desktopLoginInfo?.jgbh ?? '',
+          desktopJgbm: desktopDetail?.jgbm ?? '',
+          desktopLoginToken:
+              desktopDetail?.loginToken ?? desktopLoginInfo?.loginToken ?? '',
+          desktopQycode: desktopDetail?.qycode ?? '',
+          desktopZxbm: desktopDetail?.zxbm ?? '',
+          desktopZzjgdmz: desktopDetail?.zzjgdmz ?? '',
         );
       }
     }

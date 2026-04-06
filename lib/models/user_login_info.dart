@@ -10,7 +10,12 @@ class UserLoginInfo {
     required this.jgbh,
     this.client = '',
     this.desktopChannel = '',
+    this.desktopJgbh = '',
+    this.desktopJgbm = '',
     this.desktopLoginToken = '',
+    this.desktopQycode = '',
+    this.desktopZxbm = '',
+    this.desktopZzjgdmz = '',
     this.jgbm = '',
     this.rawUserInfoJson = '',
     this.zxbm = '',
@@ -51,7 +56,12 @@ class UserLoginInfo {
   final String jgbh;
   final String client;
   final String desktopChannel;
+  final String desktopJgbh;
+  final String desktopJgbm;
   final String desktopLoginToken;
+  final String desktopQycode;
+  final String desktopZxbm;
+  final String desktopZzjgdmz;
   final String jgbm;
   final String rawUserInfoJson;
   final String zxbm;
@@ -80,7 +90,12 @@ class UserLoginInfo {
     String? jgbh,
     String? client,
     String? desktopChannel,
+    String? desktopJgbh,
+    String? desktopJgbm,
     String? desktopLoginToken,
+    String? desktopQycode,
+    String? desktopZxbm,
+    String? desktopZzjgdmz,
     String? jgbm,
     String? rawUserInfoJson,
     String? zxbm,
@@ -100,7 +115,12 @@ class UserLoginInfo {
       jgbh: jgbh ?? this.jgbh,
       client: client ?? this.client,
       desktopChannel: desktopChannel ?? this.desktopChannel,
+      desktopJgbh: desktopJgbh ?? this.desktopJgbh,
+      desktopJgbm: desktopJgbm ?? this.desktopJgbm,
       desktopLoginToken: desktopLoginToken ?? this.desktopLoginToken,
+      desktopQycode: desktopQycode ?? this.desktopQycode,
+      desktopZxbm: desktopZxbm ?? this.desktopZxbm,
+      desktopZzjgdmz: desktopZzjgdmz ?? this.desktopZzjgdmz,
       jgbm: jgbm ?? this.jgbm,
       rawUserInfoJson: rawUserInfoJson ?? this.rawUserInfoJson,
       zxbm: zxbm ?? this.zxbm,

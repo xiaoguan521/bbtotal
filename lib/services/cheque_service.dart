@@ -9,11 +9,58 @@ import '../models/check_in_location_preset.dart';
 class ChequeInfo {
   const ChequeInfo({
     required this.cheque,
+    required this.debugInfo,
     required this.ticket,
   });
 
   final String cheque;
+  final ChequeDebugInfo debugInfo;
   final String ticket;
+}
+
+class ChequeDebugInfo {
+  const ChequeDebugInfo({
+    required this.requestBody,
+    required this.requestHeaders,
+    this.errorMessage,
+    this.responseBody,
+    this.statusCode,
+  });
+
+  final String requestBody;
+  final Map<String, String> requestHeaders;
+  final String? errorMessage;
+  final String? responseBody;
+  final int? statusCode;
+
+  String toMultilineText() {
+    final StringBuffer buffer = StringBuffer()
+      ..writeln('Request Headers:')
+      ..writeln(const JsonEncoder.withIndent('  ').convert(requestHeaders))
+      ..writeln('')
+      ..writeln('Request Body:')
+      ..writeln(requestBody);
+
+    if (statusCode != null) {
+      buffer
+        ..writeln('')
+        ..writeln('Response Status: $statusCode');
+    }
+    if (responseBody != null && responseBody!.isNotEmpty) {
+      buffer
+        ..writeln('')
+        ..writeln('Response Body:')
+        ..writeln(responseBody);
+    }
+    if (errorMessage != null && errorMessage!.isNotEmpty) {
+      buffer
+        ..writeln('')
+        ..writeln('Error:')
+        ..writeln(errorMessage);
+    }
+
+    return buffer.toString().trim();
+  }
 }
 
 class ChequeService {
@@ -25,6 +72,7 @@ class ChequeService {
       'https://appsy.jbysoft.com/tyrz/cheque/bind.service';
 
   final http.Client _client;
+  ChequeDebugInfo? lastDebugInfo;
 
   Future<ChequeInfo> fetchCheque(CheckInLocationPreset preset) async {
     final loginInfo = preset.loginInfo;
@@ -34,32 +82,50 @@ class ChequeService {
     final String headerChannel = loginInfo.desktopChannel.isNotEmpty
         ? loginInfo.desktopChannel
         : loginInfo.blqd;
-    final String headerJgbh =
-        loginInfo.zxbm.isNotEmpty ? loginInfo.zxbm : loginInfo.jgbh;
-    final String headerZzjgdmz =
-        loginInfo.zzjgdmz.isNotEmpty ? loginInfo.zzjgdmz : loginInfo.qycode;
+    final String headerJgbh = loginInfo.desktopZxbm.isNotEmpty
+        ? loginInfo.desktopZxbm
+        : (loginInfo.desktopJgbh.isNotEmpty ? loginInfo.desktopJgbh : loginInfo.jgbh);
+    final String headerZzjgdmz = loginInfo.desktopZzjgdmz.isNotEmpty
+        ? loginInfo.desktopZzjgdmz
+        : (loginInfo.desktopQycode.isNotEmpty
+            ? loginInfo.desktopQycode
+            : (loginInfo.zzjgdmz.isNotEmpty ? loginInfo.zzjgdmz : loginInfo.qycode));
+    final Map<String, String> headers = <String, String>{
+      'channel': headerChannel,
+      'jgbh': headerJgbh,
+      'login-token': headerLoginToken,
+      'zzbs': headerJgbh,
+      'zzjgdmz': headerZzjgdmz,
+      'Content-Type': 'application/json',
+    };
+    final String requestBody = jsonEncode(<String, dynamic>{
+      'client_id': 'bbPro',
+      'forward_client_id': 'bbPro',
+      'timestamp': _buildTimestamp(),
+      'userinfo': jsonEncode(_buildUserInfo(preset)),
+      'sign': _buildRandomSign(),
+      'loginToken': loginInfo.loginToken,
+    });
+
+    lastDebugInfo = ChequeDebugInfo(
+      requestBody: requestBody,
+      requestHeaders: headers,
+    );
 
     final response = await _client
         .post(
           Uri.parse(_endpoint),
-          headers: <String, String>{
-            'channel': headerChannel,
-            'jgbh': headerJgbh,
-            'login-token': headerLoginToken,
-            'zzbs': headerJgbh,
-            'zzjgdmz': headerZzjgdmz,
-            'Content-Type': 'application/json',
-          },
-          body: jsonEncode(<String, dynamic>{
-            'client_id': 'bbPro',
-            'forward_client_id': 'bbPro',
-            'timestamp': _buildTimestamp(),
-            'userinfo': jsonEncode(_buildUserInfo(preset)),
-            'sign': _buildRandomSign(),
-            'loginToken': loginInfo.loginToken,
-          }),
+          headers: headers,
+          body: requestBody,
         )
         .timeout(const Duration(seconds: 10));
+
+    lastDebugInfo = ChequeDebugInfo(
+      requestBody: requestBody,
+      requestHeaders: headers,
+      responseBody: response.body,
+      statusCode: response.statusCode,
+    );
 
     if (response.statusCode != 200) {
       throw ChequeServiceException(
@@ -83,6 +149,7 @@ class ChequeService {
 
     return ChequeInfo(
       cheque: cheque,
+      debugInfo: lastDebugInfo!,
       ticket: ticket,
     );
   }
