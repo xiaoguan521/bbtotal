@@ -201,6 +201,12 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
 
   String _buildInjectionScript(CheckInLocationPreset preset) {
     final String payloadJson = jsonEncode(preset.toBridgePayload());
+    final String userInfoJson = preset.loginInfo.rawUserInfoJson.isEmpty
+        ? '{}'
+        : preset.loginInfo.rawUserInfoJson;
+    final String zzjgxxJson = preset.loginInfo.rawZzjgxxJson.isEmpty
+        ? '{}'
+        : preset.loginInfo.rawZzjgxxJson;
     final String bridgeContextJson = jsonEncode(<String, dynamic>{
       'username': preset.loginInfo.username,
       'userid': preset.loginInfo.userId,
@@ -220,6 +226,8 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
     return '''
 (() => {
   const payload = $payloadJson;
+  const userInfo = $userInfoJson;
+  const zzjgxx = $zzjgxxJson;
   const bridgeContext = $bridgeContextJson;
   const postDebug = (message) => {
     try {
@@ -462,6 +470,65 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
     device: 'flutter-webview',
   });
 
+  const buildUserinfoResult = () => {
+    const result = {
+      ...userInfo,
+      username: bridgeContext.username || userInfo.username || '',
+      xingming: bridgeContext.username || userInfo.xingming || '',
+      userid: bridgeContext.userid || userInfo.userid || '',
+      grbh: bridgeContext.grbh || userInfo.grbh || '',
+      zjhm: bridgeContext.zjhm || userInfo.zjhm || '',
+      loginToken: bridgeContext.loginToken || userInfo.loginToken || '',
+      tyLoginToken: bridgeContext.loginToken || userInfo.tyLoginToken || '',
+      blqd: bridgeContext.blqd || userInfo.blqd || 'app_02',
+      jgbh: bridgeContext.jgbh || userInfo.jgbh || '',
+      jgbm: bridgeContext.jgbm || userInfo.jgbm || '',
+      zxbm: bridgeContext.zxbm || userInfo.zxbm || '',
+      qycode: bridgeContext.qycode || userInfo.qycode || '',
+      zzjgdmz: bridgeContext.zzjgdmz || userInfo.zzjgdmz || '',
+      cheque: bridgeContext.cheque || userInfo.cheque || '',
+      ticket: bridgeContext.ticket || userInfo.ticket || '',
+      zzjgxx: (zzjgxx && Object.keys(zzjgxx).length)
+        ? zzjgxx
+        : (userInfo.zzjgxx || {}),
+    };
+
+    if (!result.zzjgxx || typeof result.zzjgxx !== 'object') {
+      result.zzjgxx = {};
+    }
+    if (!result.zzjgxx.results) {
+      result.zzjgxx.results = {};
+    }
+    if (!result.zzjgxx.results.userData) {
+      result.zzjgxx.results.userData = {};
+    }
+    if (!result.zzjgxx.results.gjmsg) {
+      result.zzjgxx.results.gjmsg = {};
+    }
+    if (!result.zzjgxx.results.zxjgInfo) {
+      result.zzjgxx.results.zxjgInfo = {};
+    }
+
+    result.zzjgxx.results.userData.name =
+      result.zzjgxx.results.userData.name || result.username || '';
+    result.zzjgxx.results.userData.personId =
+      result.zzjgxx.results.userData.personId || result.userid || '';
+    result.zzjgxx.results.userData.personalNo =
+      result.zzjgxx.results.userData.personalNo || result.grbh || '';
+    result.zzjgxx.results.userData.zbmbh =
+      result.zzjgxx.results.userData.zbmbh || result.jgbm || '';
+    result.zzjgxx.results.gjmsg.jgbm =
+      result.zzjgxx.results.gjmsg.jgbm || result.jgbm || '';
+    result.zzjgxx.results.gjmsg.jgbh =
+      result.zzjgxx.results.gjmsg.jgbh || result.jgbh || '';
+    result.zzjgxx.results.gjmsg.zjbzxbm =
+      result.zzjgxx.results.gjmsg.zjbzxbm || result.zzjgdmz || result.qycode || '';
+    result.zzjgxx.results.zxjgInfo.jgbh =
+      result.zzjgxx.results.zxjgInfo.jgbh || result.jgbh || '';
+
+    return result;
+  };
+
   const handleCommand = (input) => {
     let command = input;
     try {
@@ -505,6 +572,15 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
         window.getWifiinfoResult(JSON.stringify(wifiInfo));
       }
       return JSON.stringify(wifiInfo);
+    }
+
+    if (type === 'getUserinfo') {
+      const userinfoResult = buildUserinfoResult();
+      postDebug('bbtotal bridge -> getUserinfo() ' + JSON.stringify(userinfoResult).slice(0, 800));
+      if (typeof window.getUserinfoResult === 'function') {
+        window.getUserinfoResult(JSON.stringify(userinfoResult));
+      }
+      return JSON.stringify(userinfoResult);
     }
 
     if (command.push || command.pushURL) {
@@ -569,6 +645,7 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
         zzjgdmz: bridgeContext.zzjgdmz || '',
         cheque: bridgeContext.cheque || '',
         ticket: bridgeContext.ticket || '',
+        zzjgxx: (zzjgxx && Object.keys(zzjgxx).length) ? zzjgxx : (window.bbgrxx.zzjgxx || {}),
       });
       window.bbgrxx.locationMsg = payload;
       window.bbgrxx.updatingLocationMsg = payload;
@@ -624,6 +701,7 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
     window.SYAppModel.hiddenTitle = () => handleCommand({ type: 'hiddenTitle' });
     window.SYAppModel.hideNav = (hidden) =>
       handleCommand({ function: 'config', hideNav: hidden ? 'YES' : 'NO' });
+    window.SYAppModel.getUserinfo = () => handleCommand({ type: 'getUserinfo' });
     window.SYAppModel.getWifiinfo = () => handleCommand({ type: 'getWifiinfo' });
     window.SYAppModel.openUrl = (url) => handleCommand({ openUrl: url });
     window.SYAppModel.reloadData = () => handleCommand({ function: 'reloadData' });

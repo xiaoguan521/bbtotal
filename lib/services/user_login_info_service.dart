@@ -109,6 +109,7 @@ class UserLoginInfoService {
 
     return loginInfo.copyWith(
       jgbm: (payload['jgbm'] ?? userInfo['bmbh'] ?? '').toString(),
+      rawZzjgxxJson: payload['zzjgxx'] == null ? '' : jsonEncode(payload['zzjgxx']),
       zxbm: (payload['zxbm'] ?? userInfo['zxbm'] ?? '').toString(),
       qycode: qycode,
       zzjgdmz: zzjgdmz,

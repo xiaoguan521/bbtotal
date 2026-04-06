@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 class UserLoginInfo {
   const UserLoginInfo({
     required this.account,
@@ -11,6 +13,7 @@ class UserLoginInfo {
     this.client = '',
     this.jgbm = '',
     this.rawUserInfoJson = '',
+    this.rawZzjgxxJson = '',
     this.zxbm = '',
     this.qycode = '',
     this.zzjgdmz = '',
@@ -31,6 +34,7 @@ class UserLoginInfo {
       client: (json['client'] ?? '') as String,
       jgbm: (json['jgbm'] ?? '') as String,
       rawUserInfoJson: (json['userinfo'] ?? '') as String,
+      rawZzjgxxJson: json['zzjgxx'] == null ? '' : jsonEncode(json['zzjgxx']),
       zxbm: (json['zxbm'] ?? '') as String,
       qycode: (json['qycode'] ?? '') as String,
       zzjgdmz: (json['zzjgdmz'] ?? '') as String,
@@ -50,6 +54,7 @@ class UserLoginInfo {
   final String client;
   final String jgbm;
   final String rawUserInfoJson;
+  final String rawZzjgxxJson;
   final String zxbm;
   final String qycode;
   final String zzjgdmz;
@@ -77,6 +82,7 @@ class UserLoginInfo {
     String? client,
     String? jgbm,
     String? rawUserInfoJson,
+    String? rawZzjgxxJson,
     String? zxbm,
     String? qycode,
     String? zzjgdmz,
@@ -95,6 +101,7 @@ class UserLoginInfo {
       client: client ?? this.client,
       jgbm: jgbm ?? this.jgbm,
       rawUserInfoJson: rawUserInfoJson ?? this.rawUserInfoJson,
+      rawZzjgxxJson: rawZzjgxxJson ?? this.rawZzjgxxJson,
       zxbm: zxbm ?? this.zxbm,
       qycode: qycode ?? this.qycode,
       zzjgdmz: zzjgdmz ?? this.zzjgdmz,
