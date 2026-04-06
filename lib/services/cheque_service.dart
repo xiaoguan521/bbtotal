@@ -148,8 +148,14 @@ class ChequeService {
 
   Map<String, dynamic> _buildUserInfo(CheckInLocationPreset preset) {
     final loginInfo = preset.loginInfo;
-    final Map<String, dynamic> userinfo =
-        _decodeJsonObject(loginInfo.rawUserInfoJson) ?? <String, dynamic>{};
+    final Map<String, dynamic> userinfo = Map<String, dynamic>.from(
+      _decodeJsonObject(loginInfo.rawUserInfoJson) ?? <String, dynamic>{},
+    );
+
+    if (userinfo['zzjgxx'] == null && loginInfo.rawZzjgxxJson.isNotEmpty) {
+      userinfo['zzjgxx'] =
+          _decodeJsonObject(loginInfo.rawZzjgxxJson) ?? <String, dynamic>{};
+    }
 
     userinfo['gztMoudleMsg'] = <String, dynamic>{
       'ryly': 'xgzt',
@@ -166,28 +172,22 @@ class ChequeService {
       'matterClassName': '打卡',
     };
 
-    userinfo['ptdlzh'] = loginInfo.account;
-    userinfo['client'] = loginInfo.client.isNotEmpty ? loginInfo.client : '4';
-    userinfo['username'] = loginInfo.username;
-    userinfo['xingming'] = loginInfo.username;
-    userinfo['loginToken'] = loginInfo.loginToken;
-    userinfo['blqd'] = loginInfo.blqd;
-    userinfo['userid'] = loginInfo.userId;
-    userinfo['grbh'] = loginInfo.grbh;
-    userinfo['zjhm'] = loginInfo.idCard;
-
-    if (loginInfo.qycode.isNotEmpty) {
-      userinfo['qycode'] = loginInfo.qycode;
-    }
-    if (loginInfo.zxbm.isNotEmpty) {
-      userinfo['zxbm'] = loginInfo.zxbm;
-    }
-    if (loginInfo.jgbm.isNotEmpty) {
-      userinfo['jgbm'] = loginInfo.jgbm;
-      userinfo['bmbh'] = loginInfo.jgbm;
-      userinfo['f_dept_id'] = loginInfo.jgbm;
-      userinfo['deptid'] = loginInfo.jgbm;
-    }
+    userinfo['ptdlzh'] = userinfo['ptdlzh'] ?? loginInfo.account;
+    userinfo['client'] =
+        userinfo['client'] ?? (loginInfo.client.isNotEmpty ? loginInfo.client : '4');
+    userinfo['username'] = userinfo['username'] ?? loginInfo.username;
+    userinfo['xingming'] = userinfo['xingming'] ?? loginInfo.username;
+    userinfo['loginToken'] = userinfo['loginToken'] ?? loginInfo.loginToken;
+    userinfo['blqd'] = userinfo['blqd'] ?? loginInfo.blqd;
+    userinfo['userid'] = userinfo['userid'] ?? loginInfo.userId;
+    userinfo['grbh'] = userinfo['grbh'] ?? loginInfo.grbh;
+    userinfo['zjhm'] = userinfo['zjhm'] ?? loginInfo.idCard;
+    userinfo['qycode'] = userinfo['qycode'] ?? loginInfo.qycode;
+    userinfo['zxbm'] = userinfo['zxbm'] ?? loginInfo.zxbm;
+    userinfo['jgbm'] = userinfo['jgbm'] ?? loginInfo.jgbm;
+    userinfo['bmbh'] = userinfo['bmbh'] ?? loginInfo.jgbm;
+    userinfo['f_dept_id'] = userinfo['f_dept_id'] ?? loginInfo.jgbm;
+    userinfo['deptid'] = userinfo['deptid'] ?? loginInfo.jgbm;
 
     userinfo['locationMsg'] = jsonEncode(preset.toBridgePayload());
     return userinfo;
