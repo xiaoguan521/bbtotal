@@ -274,6 +274,20 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
       'qycode': bridgeContext.qycode || '',
     };
 
+    const shouldTrace = (url) =>
+      typeof url === 'string' &&
+      (url.startsWith('/') || url.includes('appsy.jbysoft.com'));
+
+    const stringifyValue = (value) => {
+      if (value == null) return '';
+      if (typeof value === 'string') return value;
+      try {
+        return JSON.stringify(value);
+      } catch (_) {
+        return String(value);
+      }
+    };
+
 
 
     const originalFetch = window.fetch ? window.fetch.bind(window) : null;
@@ -289,21 +303,32 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
             (input && typeof input === 'object' && 'headers' in input ? input.headers : undefined),
         );
         Object.entries(authHeaders).forEach(([key, value]) => {
-          if (value) headers.set(key, value);
+          if (!value) return;
+          if (!headers.has(key) || headers.get(key) !== value) {
+            headers.set(key, value);
+          }
         });
         const nextInit = { ...init, headers };
-        if (typeof requestUrl === 'string' && requestUrl.includes('/tyrz/cheque/validate.service')) {
+        if (shouldTrace(requestUrl)) {
           postDebug(
-            'fetch validate.request headers=' +
-              JSON.stringify(Object.fromEntries(headers.entries())),
+            'fetch request method=' +
+              String(nextInit.method || 'GET') +
+              ' url=' +
+              requestUrl +
+              ' headers=' +
+              JSON.stringify(Object.fromEntries(headers.entries())) +
+              ' body=' +
+              stringifyValue(nextInit.body || ''),
           );
         }
 
         const response = await originalFetch(input, nextInit);
-        if (typeof requestUrl === 'string' && requestUrl.includes('/tyrz/cheque/validate.service')) {
+        if (shouldTrace(requestUrl)) {
           const text = await response.clone().text();
           postDebug(
-            'fetch validate.response status=' +
+            'fetch response url=' +
+              requestUrl +
+              ' status=' +
               response.status +
               ' body=' +
               text.slice(0, 800),
@@ -316,34 +341,54 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
     const originalOpen = XMLHttpRequest.prototype.open;
     const originalSend = XMLHttpRequest.prototype.send;
     const originalSetRequestHeader = XMLHttpRequest.prototype.setRequestHeader;
+    const originalGetAllResponseHeaders = XMLHttpRequest.prototype.getAllResponseHeaders;
+
+    XMLHttpRequest.prototype.setRequestHeader = function(name, value) {
+      this.__bbtotalHeaders = this.__bbtotalHeaders || {};
+      this.__bbtotalHeaders[name.toLowerCase()] = value;
+      return originalSetRequestHeader.call(this, name, value);
+    };
 
     XMLHttpRequest.prototype.open = function(method, url, ...rest) {
       this.__bbtotalMethod = method;
       this.__bbtotalUrl = url;
+      this.__bbtotalHeaders = this.__bbtotalHeaders || {};
       return originalOpen.call(this, method, url, ...rest);
     };
 
     XMLHttpRequest.prototype.send = function(body) {
       const requestUrl = String(this.__bbtotalUrl || '');
+      const requestHeaders = this.__bbtotalHeaders || {};
       Object.entries(authHeaders).forEach(([key, value]) => {
-        if (value) {
-          try {
-            originalSetRequestHeader.call(this, key, value);
-          } catch (_) {}
+        if (!value) return;
+        if (requestHeaders[key.toLowerCase()] === value) {
+          return;
         }
+        requestHeaders[key.toLowerCase()] = value;
+        try {
+          originalSetRequestHeader.call(this, key, value);
+        } catch (_) {}
       });
 
-      if (requestUrl.includes('/tyrz/cheque/validate.service')) {
+      if (shouldTrace(requestUrl)) {
         postDebug(
-          'xhr validate.request method=' +
+          'xhr request method=' +
             String(this.__bbtotalMethod || '') +
             ' url=' +
-            requestUrl,
+            requestUrl +
+            ' headers=' +
+            JSON.stringify(requestHeaders) +
+            ' body=' +
+            stringifyValue(body),
         );
         this.addEventListener('load', function() {
           postDebug(
-            'xhr validate.response status=' +
+            'xhr response url=' +
+              requestUrl +
+              ' status=' +
               this.status +
+              ' headers=' +
+              stringifyValue(originalGetAllResponseHeaders.call(this)) +
               ' body=' +
               String(this.responseText || '').slice(0, 800),
           );
