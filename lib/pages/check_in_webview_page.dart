@@ -265,6 +265,7 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
   const installNetworkHooks = () => {
     const authHeaders = {
       'login-token': bridgeContext.loginToken || '',
+      'tyLoginToken': bridgeContext.loginToken || '',
       'channel': bridgeContext.blqd || '',
       'blqd': bridgeContext.blqd || '',
       'jgbh': bridgeContext.zxbm || bridgeContext.jgbh || '',
@@ -273,9 +274,7 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
       'qycode': bridgeContext.qycode || '',
     };
 
-    const shouldInject = (url) =>
-      typeof url === 'string' &&
-      (url.includes('appsy.jbysoft.com') || url.startsWith('/'));
+
 
     const originalFetch = window.fetch ? window.fetch.bind(window) : null;
     if (originalFetch) {
@@ -285,22 +284,19 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
             ? input
             : (input && typeof input === 'object' && 'url' in input ? input.url : '');
 
-        let nextInit = init;
-        if (shouldInject(requestUrl)) {
-          const headers = new Headers(
-            init.headers ||
-              (input && typeof input === 'object' && 'headers' in input ? input.headers : undefined),
+        const headers = new Headers(
+          init.headers ||
+            (input && typeof input === 'object' && 'headers' in input ? input.headers : undefined),
+        );
+        Object.entries(authHeaders).forEach(([key, value]) => {
+          if (value) headers.set(key, value);
+        });
+        const nextInit = { ...init, headers };
+        if (typeof requestUrl === 'string' && requestUrl.includes('/tyrz/cheque/validate.service')) {
+          postDebug(
+            'fetch validate.request headers=' +
+              JSON.stringify(Object.fromEntries(headers.entries())),
           );
-          Object.entries(authHeaders).forEach(([key, value]) => {
-            if (value) headers.set(key, value);
-          });
-          nextInit = { ...init, headers };
-          if (requestUrl.includes('/tyrz/cheque/validate.service')) {
-            postDebug(
-              'fetch validate.request headers=' +
-                JSON.stringify(Object.fromEntries(headers.entries())),
-            );
-          }
         }
 
         const response = await originalFetch(input, nextInit);
@@ -329,15 +325,13 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
 
     XMLHttpRequest.prototype.send = function(body) {
       const requestUrl = String(this.__bbtotalUrl || '');
-      if (shouldInject(requestUrl)) {
-        Object.entries(authHeaders).forEach(([key, value]) => {
-          if (value) {
-            try {
-              originalSetRequestHeader.call(this, key, value);
-            } catch (_) {}
-          }
-        });
-      }
+      Object.entries(authHeaders).forEach(([key, value]) => {
+        if (value) {
+          try {
+            originalSetRequestHeader.call(this, key, value);
+          } catch (_) {}
+        }
+      });
 
       if (requestUrl.includes('/tyrz/cheque/validate.service')) {
         postDebug(
@@ -560,6 +554,7 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
   window.__bbtotalPreset = payload;
   window.__bbtotalApplyPreset = applyPayload;
   installBridge();
+  applyPayload();
   postDebug('bbtotal bridge installed');
 })();
 ''';
