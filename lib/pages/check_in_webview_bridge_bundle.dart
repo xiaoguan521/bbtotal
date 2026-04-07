@@ -125,9 +125,31 @@ class CheckInWebViewBridgeBundle {
     final Map<String, dynamic> rawZzjgxx = _parseJsonMap(
       preset.loginInfo.rawZzjgxxJson,
     );
+    final Map<String, dynamic> payload = _normalizeMap(preset.toBridgePayload());
 
     final Map<String, dynamic> result = <String, dynamic>{
       ...rawUserinfo,
+      'gztMoudleMsg': rawUserinfo['gztMoudleMsg'] ??
+          <String, dynamic>{
+            'ryly': 'xgzt',
+            'flag': true,
+            'xmmc': null,
+            'classifyNumber': '03001',
+            'formUrl':
+                '/dxgl-app/dxslgl/#/dxslglComp/dxslglfq/index?bm=03060&dx_29_sjdxsl=${preset.loginInfo.userId}',
+            'matterClassNumber': '03060:task',
+            'xmid': null,
+            'dx_29_sjdxsl': preset.loginInfo.userId.toString(),
+            'dx_29_dxmc': preset.loginInfo.username,
+            'classifyName': null,
+            'matterClassName': '打卡',
+          },
+      'ptdlzh': _firstNonEmpty(rawUserinfo['ptdlzh'], preset.loginInfo.account),
+      'client': _firstNonEmpty(
+        rawUserinfo['client'],
+        preset.loginInfo.client,
+        '4',
+      ),
       'username': _firstNonEmpty(
         bridgeContext['username'],
         rawUserinfo['username'],
@@ -176,6 +198,17 @@ class CheckInWebViewBridgeBundle {
         bridgeContext['ticket'],
         rawUserinfo['ticket'],
       ),
+      'bmbh': _firstNonEmpty(rawUserinfo['bmbh'], bridgeContext['jgbm']),
+      'f_dept_id': _firstNonEmpty(
+        rawUserinfo['f_dept_id'],
+        bridgeContext['jgbm'],
+      ),
+      'deptid': _firstNonEmpty(rawUserinfo['deptid'], bridgeContext['jgbm']),
+      'locationMsg': rawUserinfo['locationMsg'] ?? payload,
+      'updatingLocationMsg': rawUserinfo['updatingLocationMsg'] ?? payload,
+      'notificationRuleParams':
+          rawUserinfo['notificationRuleParams'] ?? <String, dynamic>{},
+      'loadState': rawUserinfo['loadState'] ?? true,
     };
 
     final Map<String, dynamic> zzjgxx = rawZzjgxx.isNotEmpty
@@ -308,6 +341,14 @@ class CheckInWebViewBridgeBundle {
     }
   };
 
+  const deepClone = (value) => {
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch (_) {
+      return value;
+    }
+  };
+
   const frameLabel = (targetWindow, fallbackLabel) => {
     if (targetWindow === window) {
       return 'main';
@@ -338,10 +379,7 @@ class CheckInWebViewBridgeBundle {
 
   const applyPayload = (targetWindow = window) => {
     const targetDocument = targetWindow.document;
-    const nextBbgrxx =
-      targetWindow.bbgrxx && typeof targetWindow.bbgrxx === 'object'
-        ? targetWindow.bbgrxx
-        : {};
+    const nextBbgrxx = ensureUserContext(targetWindow);
     nextBbgrxx.locationMsg = payload;
     nextBbgrxx.updatingLocationMsg = payload;
     targetWindow.bbgrxx = nextBbgrxx;
@@ -376,6 +414,77 @@ class CheckInWebViewBridgeBundle {
     }
 
     return JSON.stringify(payload);
+  };
+
+  const ensureUserContext = (targetWindow, options = {}) => {
+    const label = options.label || frameLabel(targetWindow, 'main');
+    const current =
+      targetWindow.bbgrxx && typeof targetWindow.bbgrxx === 'object'
+        ? targetWindow.bbgrxx
+        : {};
+    const base = deepClone(userinfoResult) || {};
+    const next = {
+      ...base,
+      ...current,
+    };
+
+    const baseZzjgxx =
+      base.zzjgxx && typeof base.zzjgxx === 'object' ? base.zzjgxx : {};
+    const nextZzjgxx =
+      next.zzjgxx && typeof next.zzjgxx === 'object' ? next.zzjgxx : {};
+    const baseResults =
+      baseZzjgxx.results && typeof baseZzjgxx.results === 'object'
+        ? baseZzjgxx.results
+        : {};
+    const nextResults =
+      nextZzjgxx.results && typeof nextZzjgxx.results === 'object'
+        ? nextZzjgxx.results
+        : {};
+
+    next.zzjgxx = {
+      ...baseZzjgxx,
+      ...nextZzjgxx,
+      results: {
+        ...baseResults,
+        ...nextResults,
+        userData: {
+          ...(baseResults.userData || {}),
+          ...(nextResults.userData || {}),
+        },
+        gjmsg: {
+          ...(baseResults.gjmsg || {}),
+          ...(nextResults.gjmsg || {}),
+        },
+        zxjgInfo: {
+          ...(baseResults.zxjgInfo || {}),
+          ...(nextResults.zxjgInfo || {}),
+        },
+      },
+    };
+
+    next.locationMsg = payload;
+    next.updatingLocationMsg = payload;
+    next.notificationRuleParams =
+      next.notificationRuleParams && typeof next.notificationRuleParams === 'object'
+        ? next.notificationRuleParams
+        : {};
+    next.loadState = next.loadState ?? true;
+
+    targetWindow.bbgrxx = next;
+    targetWindow.userinfo = next;
+    try {
+      targetWindow.bbgrxx2 = JSON.stringify(next);
+    } catch (_) {}
+
+    if (!targetWindow.__bbtotalUserContextLogged) {
+      targetWindow.__bbtotalUserContextLogged = true;
+      postDebug(
+        '[' + label + '] user context ready zzjgxx.results=' +
+          String(!!(next.zzjgxx && next.zzjgxx.results)),
+      );
+    }
+
+    return next;
   };
 
   const installConsoleHooks = (targetWindow, label) => {
@@ -718,6 +827,11 @@ class CheckInWebViewBridgeBundle {
     installNetworkHooks(targetWindow, label);
     installPromptProxy(targetWindow);
     installVConsole(targetWindow, label);
+    ensureUserContext(targetWindow, { label });
+    setTimeout(() => ensureUserContext(targetWindow, { label }), 0);
+    setTimeout(() => ensureUserContext(targetWindow, { label }), 150);
+    setTimeout(() => ensureUserContext(targetWindow, { label }), 800);
+    setTimeout(() => ensureUserContext(targetWindow, { label }), 2000);
 
     targetWindow.__bbtotalWindowBridgeInstalled = true;
     postDebug('[' + label + '] bridge installed');
