@@ -227,11 +227,23 @@ class HybridBridgeService {
     getUserInfo: createSyncBridgeMethod('getUserInfo', () => {
       return runtime.userInfoJson || stringify(runtime.userInfo || {});
     }),
-    getLocation: createSyncBridgeMethod('getLocation', () => {
-      return stringify(runtime.locationPayload || {});
+    getLocation: createSyncBridgeMethod('getLocation', (...args) => {
+      const data = stringify(runtime.locationPayload || {});
+      for (const arg of args) {
+        if (typeof arg === 'function') {
+          try { arg(data); } catch (_) {}
+        }
+      }
+      return data;
     }),
-    getUpdatingLocation: createSyncBridgeMethod('getUpdatingLocation', () => {
-      return stringify(runtime.locationPayload || {});
+    getUpdatingLocation: createSyncBridgeMethod('getUpdatingLocation', (...args) => {
+      const data = stringify(runtime.locationPayload || {});
+      for (const arg of args) {
+        if (typeof arg === 'function') {
+          try { arg(data); } catch (_) {}
+        }
+      }
+      return data;
     }),
     getWifiinfo: createSyncBridgeMethod('getWifiinfo', () => {
       return stringify(runtime.wifiInfo || {});
