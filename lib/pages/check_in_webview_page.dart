@@ -461,6 +461,46 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
     };
   };
 
+  const installBbgrxxWatcher = () => {
+    let snapshotTaken = false;
+    const dump = (label, value) => {
+      try {
+        postDebug(
+          label +
+            ': ' +
+            JSON.stringify(value, null, 2).slice(0, 2000),
+        );
+      } catch (_) {
+        postDebug(label + ': [unserializable]');
+      }
+    };
+
+    const inspect = () => {
+      const current = window.bbgrxx;
+      if (!snapshotTaken && current && typeof current === 'object') {
+        snapshotTaken = true;
+        dump('bbgrxx.firstSeen', current);
+      }
+    };
+
+    let currentValue = window.bbgrxx;
+    Object.defineProperty(window, 'bbgrxx', {
+      configurable: true,
+      enumerable: true,
+      get() {
+        return currentValue;
+      },
+      set(value) {
+        currentValue = value;
+        dump('bbgrxx.assigned', value);
+        inspect();
+      },
+    });
+
+    inspect();
+    setInterval(inspect, 200);
+  };
+
   const buildWifiInfo = () => ({
     ssid: '',
     bssid: '',
@@ -633,7 +673,8 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
   const applyPayload = () => {
     try {
       if (!window.bbgrxx || typeof window.bbgrxx !== 'object') {
-        window.bbgrxx = {};
+        postDebug('bbtotal applyPayload skipped: window.bbgrxx is unavailable');
+        return false;
       }
       window.bbgrxx.locationMsg = payload;
       window.bbgrxx.updatingLocationMsg = payload;
@@ -723,6 +764,7 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
   installConsoleHooks();
   installVConsole();
   installNetworkHooks();
+  installBbgrxxWatcher();
   if (!window.__bbtotalBridgeInstalled) {
     installBridge();
     window.__bbtotalBridgeInstalled = true;
