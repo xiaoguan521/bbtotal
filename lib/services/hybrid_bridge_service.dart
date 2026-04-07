@@ -16,6 +16,9 @@ class HybridBridgeService {
     final CookieManager cookieManager = CookieManager.instance();
     final WebUri webUri = WebUri(context.resolvedUri.toString());
 
+    await cookieManager.deleteCookies(url: webUri);
+    onLog?.call('Cleared old cookies for ${context.resolvedUri.host}.');
+
     for (final HybridCookieSeed cookie in context.cookieSeeds) {
       await cookieManager.setCookie(
         url: webUri,
