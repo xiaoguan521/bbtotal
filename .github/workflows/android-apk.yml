@@ -2,6 +2,12 @@ name: Mobile Packages
 
 on:
   workflow_dispatch:
+    inputs:
+      build_ios:
+        description: Build iOS test package too
+        required: false
+        default: false
+        type: boolean
   push:
     branches:
       - main
@@ -106,6 +112,7 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 60
     needs: analyze
+    if: github.event_name != 'workflow_dispatch' || inputs.build_ios
 
     steps:
       - name: Checkout

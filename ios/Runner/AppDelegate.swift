@@ -13,6 +13,14 @@ import UIKit
     GeneratedPluginRegistrant.register(with: self)
 
     if let controller = window?.rootViewController as? FlutterViewController {
+      let nativeWebViewRegistrar = registrar(
+        forPlugin: "bbtotal_native_check_in_webview"
+      )
+      nativeWebViewRegistrar.register(
+        NativeCheckInWebViewFactory(messenger: controller.binaryMessenger),
+        withId: NativeCheckInWebViewFactory.viewType
+      )
+
       let channel = FlutterMethodChannel(
         name: channelName,
         binaryMessenger: controller.binaryMessenger

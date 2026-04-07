@@ -17,6 +17,7 @@ build/
 coverage/
 
 # Local build helpers
+.gradle/
 .gradle-user-home/
 build_logs/
 

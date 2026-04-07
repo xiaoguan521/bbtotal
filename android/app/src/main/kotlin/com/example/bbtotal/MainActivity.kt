@@ -8,6 +8,16 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
+        flutterEngine
+            .platformViewsController
+            .registry
+            .registerViewFactory(
+                NativeCheckInWebViewFactory.VIEW_TYPE,
+                NativeCheckInWebViewFactory(
+                    flutterEngine.dartExecutor.binaryMessenger,
+                ),
+            )
+
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             CHANNEL_NAME,

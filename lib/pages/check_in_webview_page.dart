@@ -1,9 +1,8 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
-import 'package:webview_flutter/webview_flutter.dart';
 
 import '../models/check_in_location_preset.dart';
+import 'check_in_webview_bridge_bundle.dart';
+import 'native_check_in_webview.dart';
 
 class CheckInWebViewPage extends StatefulWidget {
   const CheckInWebViewPage({
@@ -12,7 +11,7 @@ class CheckInWebViewPage extends StatefulWidget {
   });
 
   static const String inspectedCheckInUrl =
-      'https://appsy.jbysoft.com/dxgl-app/dxslgl/#/dxslglComp/dxslglfq/index?bm=03060&dx_29_sjdxsl=3517&tyLoginToken=6d77b5d26961f35f56e827e81558da4710:app_02&ticket=nothing&cheque=tyrz029860a4855f44e5a5899641ac483483&zzjgdmz=shineyue&cpbs=bbPro&qycode=shineyue&ztConfig=7171a46ae52cd9c7c0278a72c65492b0fd234129620126cd57ac2fccaaec061b0abed44bcb02786c4057648caf5b99b6c4e7488567e1d5fa7399b6cf5fdeb7ea09b27db192ee5320e008c8c888a156ab41012aa0eea91e2a034cd260ee71bc6e6c20b42e49633af74bfc77a9e1142c02c45548a3e3e89cc6a93eda4ca371a379&zjhm=130528198704157217&khbh=01000000009000026129&jgbm=130110000102a705&userid=3517&zxbm=1301100001&cysxFlag=false';
+      CheckInWebViewPageBridgeDefaults.inspectedCheckInUrl;
 
   final CheckInLocationPreset preset;
 
@@ -21,761 +20,112 @@ class CheckInWebViewPage extends StatefulWidget {
 }
 
 class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
-  late final Uri _resolvedUri =
-      widget.preset.buildCheckInUri(CheckInWebViewPage.inspectedCheckInUrl);
+  late final CheckInWebViewBridgeBundle _bundle =
+      CheckInWebViewBridgeBundle.fromPreset(widget.preset);
+  final NativeCheckInWebViewController _nativeController =
+      NativeCheckInWebViewController();
+
   bool _hideNativeChrome = false;
-  late final WebViewController _controller =
-      WebViewController()
-        ..setJavaScriptMode(JavaScriptMode.unrestricted)
-        ..addJavaScriptChannel(
-          'bbtotalDebug',
-          onMessageReceived: (JavaScriptMessage message) {
-            if (!mounted) {
-              return;
-            }
-            setState(() {
-              _appendDiagnostic(message.message);
-            });
-          },
-        )
-        ..addJavaScriptChannel(
-          'bbtotalBridgeControl',
-          onMessageReceived: (JavaScriptMessage message) async {
-            if (!mounted) {
-              return;
-            }
-
-            final Map<String, dynamic>? command = _decodeCommand(message.message);
-            if (command == null) {
-              return;
-            }
-
-            final String type = (command['type'] ?? '').toString();
-            if (type == 'hiddenTitle') {
-              setState(() {
-                _hideNativeChrome = true;
-                _status = 'Native title hidden by H5 bridge request.';
-              });
-            } else if (type == 'showTitle') {
-              setState(() {
-                _hideNativeChrome = false;
-                _status = 'Native title shown by H5 bridge request.';
-              });
-            } else if (type == 'openUrl') {
-              final String url = (command['url'] ?? '').toString();
-              setState(() {
-                _status = 'H5 requested openUrl: $url';
-              });
-            } else if (type == 'pop') {
-              if (Navigator.of(context).canPop()) {
-                Navigator.of(context).pop();
-              }
-            } else if (type == 'reload') {
-              await _controller.reload();
-            }
-            _appendDiagnostic('bridge-control: ${message.message}');
-            setState(() {
-              _pageDiagnostics = _pageDiagnostics;
-            });
-          },
-        )
-        ..setNavigationDelegate(
-          NavigationDelegate(
-            onPageStarted: (String url) {
-              if (!mounted) {
-                return;
-              }
-              setState(() {
-                _isLoading = true;
-                _status = 'Loading check-in page...';
-              });
-            },
-            onPageFinished: (String url) async {
-              await _injectPresetIntoPage();
-              await Future<void>.delayed(const Duration(seconds: 1));
-              await _collectPageDiagnostics();
-            },
-            onWebResourceError: (WebResourceError error) {
-              if (!mounted) {
-                return;
-              }
-              setState(() {
-                _isLoading = false;
-                _status = 'WebView error: ${error.description}';
-              });
-            },
-          ),
-        )
-        ..loadRequest(_resolvedUri);
-
   bool _isLoading = true;
-  String _pageDiagnostics = 'No page diagnostics yet.';
-  String _status = 'Opening check-in page...';
+  String _pageDiagnostics = 'No bridge events yet.';
+  String _status = 'Opening check-in page with the native bridge...';
 
   void _appendDiagnostic(String message) {
-    final String current = _pageDiagnostics == 'No page diagnostics yet.'
+    final String current = _pageDiagnostics == 'No bridge events yet.'
         ? ''
         : _pageDiagnostics;
-    final String next = current.isEmpty ? message : '$current\n$message';
-    _pageDiagnostics = next;
+    _pageDiagnostics = current.isEmpty ? message : '$current\n$message';
   }
 
-  Map<String, dynamic>? _decodeCommand(String raw) {
-    try {
-      final Object decoded = jsonDecode(raw);
-      if (decoded is Map<String, dynamic>) {
-        return decoded;
-      }
-      if (decoded is Map) {
-        return decoded.map(
-          (key, dynamic value) => MapEntry(key.toString(), value),
-        );
-      }
-    } catch (_) {}
-    return null;
-  }
-
-  Future<void> _injectPresetIntoPage() async {
-    try {
-      await _controller.runJavaScript(_buildInjectionScript(widget.preset));
-      if (!mounted) {
-        return;
-      }
-
+  void _handleBridgeControl(Map<String, dynamic> command) {
+    final String type = (command['type'] ?? '').toString();
+    if (type == 'hiddenTitle') {
       setState(() {
-        _isLoading = false;
-        _status = 'Bridge installed. Waiting for the H5 page to request native capabilities.';
+        _hideNativeChrome = true;
+        _status = 'Native title hidden by bridge request.';
       });
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-
+      return;
+    }
+    if (type == 'showTitle') {
       setState(() {
-        _isLoading = false;
-        _status = 'Injection failed: $error';
+        _hideNativeChrome = false;
+        _status = 'Native title shown by bridge request.';
       });
+      return;
+    }
+    if (type == 'openUrl') {
+      final String url = (command['url'] ?? '').toString();
+      setState(() {
+        _status = 'H5 requested openUrl: $url';
+      });
+      return;
+    }
+    if (type == 'pop') {
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+      return;
+    }
+    if (type == 'reload') {
+      _nativeController.reload();
     }
   }
 
-  Future<void> _collectPageDiagnostics() async {
-    try {
-      final Object result = await _controller.runJavaScriptReturningResult('''
-(() => {
-  const bodyText = document.body ? document.body.innerText : '';
-  const candidates = Array.from(document.querySelectorAll('div, span, p, button, a'))
-    .map((el) => (el.innerText || '').trim())
-    .filter((text) => text && (
-      text.includes('失败') ||
-      text.includes('错误') ||
-      text.includes('重试') ||
-      text.includes('异常')
-    ));
-
-  return JSON.stringify({
-    href: location.href,
-    title: document.title,
-    bodyText: bodyText.slice(0, 1200),
-    candidateErrors: candidates.slice(0, 12),
-  });
-})();
-''');
-
-      final String raw = result.toString();
-      final String normalized = raw.startsWith('"') ? jsonDecode(raw) as String : raw;
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _appendDiagnostic('page-snapshot: $normalized');
-      });
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _appendDiagnostic('collect-diagnostics failed: $error');
-      });
-    }
-  }
-
-  String _buildInjectionScript(CheckInLocationPreset preset) {
-    final String payloadJson = jsonEncode(preset.toBridgePayload());
-    final String userInfoJson = preset.loginInfo.rawUserInfoJson.isEmpty
-        ? '{}'
-        : preset.loginInfo.rawUserInfoJson;
-    final String zzjgxxJson = preset.loginInfo.rawZzjgxxJson.isEmpty
-        ? '{}'
-        : preset.loginInfo.rawZzjgxxJson;
-    final String bridgeContextJson = jsonEncode(<String, dynamic>{
-      'username': preset.loginInfo.username,
-      'userid': preset.loginInfo.userId,
-      'grbh': preset.loginInfo.grbh,
-      'zjhm': preset.loginInfo.idCard,
-      'loginToken': preset.loginInfo.loginToken,
-      'blqd': preset.loginInfo.blqd,
-      'jgbh': preset.loginInfo.jgbh,
-      'jgbm': preset.loginInfo.jgbm,
-      'zxbm': preset.loginInfo.zxbm,
-      'qycode': preset.loginInfo.qycode,
-      'zzjgdmz': preset.loginInfo.zzjgdmz,
-      'ticket': preset.ticket,
-      'cheque': preset.cheque,
-      'account': preset.loginInfo.account,
-    });
-    return '''
-(() => {
-  const payload = $payloadJson;
-  const userInfo = $userInfoJson;
-  const zzjgxx = $zzjgxxJson;
-  const bridgeContext = $bridgeContextJson;
-  const postDebug = (message) => {
-    try {
-      window.bbtotalDebug.postMessage(message);
-    } catch (_) {}
-  };
-  const postBridgeControl = (command) => {
-    try {
-      window.bbtotalBridgeControl.postMessage(JSON.stringify(command));
-    } catch (_) {}
-  };
-
-  const installConsoleHooks = () => {
-    const wrap = (level) => {
-      const original = console[level];
-      console[level] = (...args) => {
-        postDebug('console.' + level + ': ' + args.map((item) => {
-          try {
-            return typeof item === 'string' ? item : JSON.stringify(item);
-          } catch (_) {
-            return String(item);
-          }
-        }).join(' '));
-        if (original) {
-          original.apply(console, args);
-        }
-      };
-    };
-
-    wrap('log');
-    wrap('warn');
-    wrap('error');
-
-    window.addEventListener('error', (event) => {
-      postDebug('window.onerror: ' + (event.message || 'unknown error'));
-    });
-
-    window.addEventListener('unhandledrejection', (event) => {
-      postDebug('unhandledrejection: ' + String(event.reason || 'unknown reason'));
-    });
-  };
-
-  const installVConsole = () => {
-    const createInstance = () => {
-      if (window.VConsole && !window.__bbtotalVConsole) {
-        try {
-          window.__bbtotalVConsole = new window.VConsole();
-          postDebug('vConsole installed');
-        } catch (error) {
-          postDebug('vConsole init failed: ' + String(error));
-        }
-      }
-    };
-
-    if (window.VConsole) {
-      createInstance();
+  void _handleNativeEvent(Map<String, dynamic> event) {
+    if (!mounted) {
       return;
     }
 
-    const existing = document.getElementById('bbtotal-vconsole-script');
-    if (existing) {
-      postDebug('vConsole script already loading');
-      return;
-    }
-
-    const sources = [
-      'https://unpkg.com/vconsole@latest/dist/vconsole.min.js',
-      'https://cdn.jsdelivr.net/npm/vconsole@latest/dist/vconsole.min.js',
-    ];
-
-    let index = 0;
-    const script = document.createElement('script');
-    script.id = 'bbtotal-vconsole-script';
-
-    const loadNext = () => {
-      if (index >= sources.length) {
-        postDebug('vConsole script load failed for all sources');
-        return;
-      }
-      script.src = sources[index];
-      index += 1;
-    };
-
-    script.onload = () => {
-      postDebug('vConsole script loaded: ' + script.src);
-      createInstance();
-    };
-    script.onerror = () => {
-      postDebug('vConsole script failed: ' + script.src);
-      loadNext();
-    };
-
-    loadNext();
-    document.documentElement.appendChild(script);
-  };
-
-  const installNetworkHooks = () => {
-    const authHeaders = {
-      'login-token': bridgeContext.loginToken || '',
-      'tyLoginToken': bridgeContext.loginToken || '',
-      'channel': bridgeContext.blqd || '',
-      'blqd': bridgeContext.blqd || '',
-      'jgbh': bridgeContext.zxbm || bridgeContext.jgbh || '',
-      'zzbs': bridgeContext.zxbm || bridgeContext.jgbh || '',
-      'zzjgdmz': bridgeContext.zzjgdmz || bridgeContext.qycode || '',
-      'qycode': bridgeContext.qycode || '',
-    };
-
-    const shouldTrace = (url) =>
-      typeof url === 'string' &&
-      (url.startsWith('/') || url.includes('appsy.jbysoft.com'));
-
-    const stringifyValue = (value) => {
-      if (value == null) return '';
-      if (typeof value === 'string') return value;
-      try {
-        return JSON.stringify(value);
-      } catch (_) {
-        return String(value);
-      }
-    };
-
-
-
-    const originalFetch = window.fetch ? window.fetch.bind(window) : null;
-    if (originalFetch) {
-      window.fetch = async (input, init = {}) => {
-        const requestUrl =
-          typeof input === 'string'
-            ? input
-            : (input && typeof input === 'object' && 'url' in input ? input.url : '');
-
-        const headers = new Headers(
-          init.headers ||
-            (input && typeof input === 'object' && 'headers' in input ? input.headers : undefined),
-        );
-        Object.entries(authHeaders).forEach(([key, value]) => {
-          if (!value) return;
-          if (!headers.has(key) || headers.get(key) !== value) {
-            headers.set(key, value);
-          }
+    final String type = (event['type'] ?? '').toString();
+    switch (type) {
+      case 'pageStarted':
+        setState(() {
+          _isLoading = true;
+          _status = 'Loading check-in page...';
+          _appendDiagnostic('pageStarted: ${event['url'] ?? ''}');
         });
-        const nextInit = { ...init, headers };
-        if (shouldTrace(requestUrl)) {
-          postDebug(
-            'fetch request method=' +
-              String(nextInit.method || 'GET') +
-              ' url=' +
-              requestUrl +
-              ' headers=' +
-              JSON.stringify(Object.fromEntries(headers.entries())) +
-              ' body=' +
-              stringifyValue(nextInit.body || ''),
-          );
-        }
-
-        const response = await originalFetch(input, nextInit);
-        if (shouldTrace(requestUrl)) {
-          const text = await response.clone().text();
-          postDebug(
-            'fetch response url=' +
-              requestUrl +
-              ' status=' +
-              response.status +
-              ' body=' +
-              text.slice(0, 800),
-          );
-        }
-        return response;
-      };
-    }
-
-    const originalOpen = XMLHttpRequest.prototype.open;
-    const originalSend = XMLHttpRequest.prototype.send;
-    const originalSetRequestHeader = XMLHttpRequest.prototype.setRequestHeader;
-    const originalGetAllResponseHeaders = XMLHttpRequest.prototype.getAllResponseHeaders;
-
-    XMLHttpRequest.prototype.setRequestHeader = function(name, value) {
-      this.__bbtotalHeaders = this.__bbtotalHeaders || {};
-      this.__bbtotalHeaders[name.toLowerCase()] = value;
-      return originalSetRequestHeader.call(this, name, value);
-    };
-
-    XMLHttpRequest.prototype.open = function(method, url, ...rest) {
-      this.__bbtotalMethod = method;
-      this.__bbtotalUrl = url;
-      this.__bbtotalHeaders = this.__bbtotalHeaders || {};
-      return originalOpen.call(this, method, url, ...rest);
-    };
-
-    XMLHttpRequest.prototype.send = function(body) {
-      const requestUrl = String(this.__bbtotalUrl || '');
-      const requestHeaders = this.__bbtotalHeaders || {};
-      Object.entries(authHeaders).forEach(([key, value]) => {
-        if (!value) return;
-        if (requestHeaders[key.toLowerCase()] === value) {
-          return;
-        }
-        requestHeaders[key.toLowerCase()] = value;
-        try {
-          originalSetRequestHeader.call(this, key, value);
-        } catch (_) {}
-      });
-
-      if (shouldTrace(requestUrl)) {
-        postDebug(
-          'xhr request method=' +
-            String(this.__bbtotalMethod || '') +
-            ' url=' +
-            requestUrl +
-            ' headers=' +
-            JSON.stringify(requestHeaders) +
-            ' body=' +
-            stringifyValue(body),
-        );
-        this.addEventListener('load', function() {
-          postDebug(
-            'xhr response url=' +
-              requestUrl +
-              ' status=' +
-              this.status +
-              ' headers=' +
-              stringifyValue(originalGetAllResponseHeaders.call(this)) +
-              ' body=' +
-              String(this.responseText || '').slice(0, 800),
-          );
+        break;
+      case 'pageFinished':
+        setState(() {
+          _isLoading = false;
+          _status = 'Native bridge is ready before page scripts run.';
+          _appendDiagnostic('pageFinished: ${event['url'] ?? ''}');
         });
-      }
-
-      return originalSend.call(this, body);
-    };
-  };
-
-  const installBbgrxxWatcher = () => {
-    let snapshotTaken = false;
-    const dump = (label, value) => {
-      try {
-        postDebug(
-          label +
-            ': ' +
-            JSON.stringify(value, null, 2).slice(0, 2000),
-        );
-      } catch (_) {
-        postDebug(label + ': [unserializable]');
-      }
-    };
-
-    const inspect = () => {
-      const current = window.bbgrxx;
-      if (!snapshotTaken && current && typeof current === 'object') {
-        snapshotTaken = true;
-        dump('bbgrxx.firstSeen', current);
-      }
-    };
-
-    let currentValue = window.bbgrxx;
-    Object.defineProperty(window, 'bbgrxx', {
-      configurable: true,
-      enumerable: true,
-      get() {
-        return currentValue;
-      },
-      set(value) {
-        currentValue = value;
-        dump('bbgrxx.assigned', value);
-        inspect();
-      },
-    });
-
-    inspect();
-    setInterval(inspect, 200);
-  };
-
-  const buildWifiInfo = () => ({
-    ssid: '',
-    bssid: '',
-    wifiName: '',
-    wifiMac: '',
-    isWifi: false,
-    device: 'flutter-webview',
-  });
-
-  const buildUserinfoResult = () => {
-    const result = {
-      ...userInfo,
-      username: bridgeContext.username || userInfo.username || '',
-      xingming: bridgeContext.username || userInfo.xingming || '',
-      userid: bridgeContext.userid || userInfo.userid || '',
-      grbh: bridgeContext.grbh || userInfo.grbh || '',
-      zjhm: bridgeContext.zjhm || userInfo.zjhm || '',
-      loginToken: bridgeContext.loginToken || userInfo.loginToken || '',
-      tyLoginToken: bridgeContext.loginToken || userInfo.tyLoginToken || '',
-      blqd: bridgeContext.blqd || userInfo.blqd || 'app_02',
-      jgbh: bridgeContext.jgbh || userInfo.jgbh || '',
-      jgbm: bridgeContext.jgbm || userInfo.jgbm || '',
-      zxbm: bridgeContext.zxbm || userInfo.zxbm || '',
-      qycode: bridgeContext.qycode || userInfo.qycode || '',
-      zzjgdmz: bridgeContext.zzjgdmz || userInfo.zzjgdmz || '',
-      cheque: bridgeContext.cheque || userInfo.cheque || '',
-      ticket: bridgeContext.ticket || userInfo.ticket || '',
-      zzjgxx: (zzjgxx && Object.keys(zzjgxx).length)
-        ? zzjgxx
-        : (userInfo.zzjgxx || {}),
-    };
-
-    if (!result.zzjgxx || typeof result.zzjgxx !== 'object') {
-      result.zzjgxx = {};
-    }
-    if (!result.zzjgxx.results) {
-      result.zzjgxx.results = {};
-    }
-    if (!result.zzjgxx.results.userData) {
-      result.zzjgxx.results.userData = {};
-    }
-    if (!result.zzjgxx.results.gjmsg) {
-      result.zzjgxx.results.gjmsg = {};
-    }
-    if (!result.zzjgxx.results.zxjgInfo) {
-      result.zzjgxx.results.zxjgInfo = {};
-    }
-
-    result.zzjgxx.results.userData.name =
-      result.zzjgxx.results.userData.name || result.username || '';
-    result.zzjgxx.results.userData.personId =
-      result.zzjgxx.results.userData.personId || result.userid || '';
-    result.zzjgxx.results.userData.personalNo =
-      result.zzjgxx.results.userData.personalNo || result.grbh || '';
-    result.zzjgxx.results.userData.zbmbh =
-      result.zzjgxx.results.userData.zbmbh || result.jgbm || '';
-    result.zzjgxx.results.gjmsg.jgbm =
-      result.zzjgxx.results.gjmsg.jgbm || result.jgbm || '';
-    result.zzjgxx.results.gjmsg.jgbh =
-      result.zzjgxx.results.gjmsg.jgbh || result.jgbh || '';
-    result.zzjgxx.results.gjmsg.zjbzxbm =
-      result.zzjgxx.results.gjmsg.zjbzxbm || result.zzjgdmz || result.qycode || '';
-    result.zzjgxx.results.zxjgInfo.jgbh =
-      result.zzjgxx.results.zxjgInfo.jgbh || result.jgbh || '';
-
-    return result;
-  };
-
-  const handleCommand = (input) => {
-    let command = input;
-    try {
-      if (typeof input === 'string') {
-        command = JSON.parse(input);
-      }
-    } catch (_) {}
-
-    if (!command || typeof command !== 'object') {
-      postDebug('bbtotal bridge -> unsupported command: ' + String(input));
-      return '';
-    }
-
-    const type = command.type || command.function || '';
-    if (type === 'getLocation' || type === 'getUpdatingLocation') {
-      postDebug('bbtotal bridge -> command ' + type);
-      applyPayload();
-      return JSON.stringify(payload);
-    }
-
-    if (type === 'hiddenTitle') {
-      postDebug('bbtotal bridge -> hiddenTitle()');
-      postBridgeControl({ type: 'hiddenTitle' });
-      return '';
-    }
-
-    if (type === 'config') {
-      postDebug('bbtotal bridge -> config ' + JSON.stringify(command));
-      if (command.hideNav === 'YES' || command.hideNav === true) {
-        postBridgeControl({ type: 'hiddenTitle' });
-      } else if (command.hideNav === 'NO' || command.hideNav === false) {
-        postBridgeControl({ type: 'showTitle' });
-      }
-      return '';
-    }
-
-    if (type === 'getWifiinfo') {
-      const wifiInfo = buildWifiInfo();
-      postDebug('bbtotal bridge -> getWifiinfo() ' + JSON.stringify(wifiInfo));
-      if (typeof window.getWifiinfoResult === 'function') {
-        window.getWifiinfoResult(JSON.stringify(wifiInfo));
-      }
-      return JSON.stringify(wifiInfo);
-    }
-
-    if (type === 'getUserinfo') {
-      const userinfoResult = buildUserinfoResult();
-      postDebug('bbtotal bridge -> getUserinfo() ' + JSON.stringify(userinfoResult).slice(0, 800));
-      if (typeof window.getUserinfoResult === 'function') {
-        window.getUserinfoResult(JSON.stringify(userinfoResult));
-      }
-      if (typeof window.getUserInfoResult === 'function') {
-        window.getUserInfoResult(JSON.stringify(userinfoResult));
-      }
-      return JSON.stringify(userinfoResult);
-    }
-
-    if (type === 'getUserInfo') {
-      return handleCommand({ type: 'getUserinfo' });
-    }
-
-    if (command.push || command.pushURL) {
-      postDebug('bbtotal bridge -> push ' + JSON.stringify(command));
-      return '';
-    }
-
-    if (command.pop) {
-      postDebug('bbtotal bridge -> pop ' + JSON.stringify(command));
-      postBridgeControl({ type: 'pop' });
-      return '';
-    }
-
-    if (command.openUrl) {
-      postDebug('bbtotal bridge -> openUrl ' + command.openUrl);
-      postBridgeControl({ type: 'openUrl', url: command.openUrl });
-      return '';
-    }
-
-    if (type === 'reloadData') {
-      postDebug('bbtotal bridge -> reloadData');
-      postBridgeControl({ type: 'reload' });
-      return '';
-    }
-
-    if (type === 'launchMiniProgram') {
-      postDebug('bbtotal bridge -> launchMiniProgram ' + JSON.stringify(command));
-      return '';
-    }
-
-    if (type === 'yuyueMeeting' ||
-        type === 'endMeeting' ||
-        type === 'joinyuyueMeeting' ||
-        type === 'joinyuyueZhibo') {
-      postDebug('bbtotal bridge -> native meeting action ' + JSON.stringify(command));
-      return '';
-    }
-
-    postDebug('bbtotal bridge -> passthrough command ' + JSON.stringify(command));
-    return '';
-  };
-
-  const applyPayload = () => {
-    try {
-      if (!window.bbgrxx || typeof window.bbgrxx !== 'object') {
-        postDebug('bbtotal applyPayload skipped: window.bbgrxx is unavailable');
-        return false;
-      }
-      window.bbgrxx.locationMsg = payload;
-      window.bbgrxx.updatingLocationMsg = payload;
-
-      if (window.Se && typeof window.Se === 'object') {
-        window.Se.locationMsg = payload;
-      }
-
-      const textarea = document.querySelector('#textarea-dx_29_dkwz');
-      if (textarea) {
-        textarea.value = payload.data.address || '';
-        textarea.innerText = payload.data.address || '';
-        ['input', 'change', 'blur'].forEach((eventName) => {
-          textarea.dispatchEvent(new Event(eventName, { bubbles: true }));
+        break;
+      case 'bridgeControl':
+        final Object? rawCommand = event['command'];
+        if (rawCommand is Map) {
+          final Map<String, dynamic> command = rawCommand.map<String, dynamic>(
+            (dynamic key, dynamic value) => MapEntry(key.toString(), value),
+          );
+          _appendDiagnostic('bridgeControl: $command');
+          _handleBridgeControl(command);
+        }
+        break;
+      case 'log':
+        setState(() {
+          _appendDiagnostic('log: ${event['message'] ?? ''}');
         });
-      }
-
-      if (typeof window.locationResult === 'function') {
-        window.locationResult(payload);
-        postDebug('bbtotal applyPayload -> window.locationResult(payload)');
-      } else if (
-        window.onBasicFormRef &&
-        typeof window.onBasicFormRef.updateGhsxLoaction === 'function'
-      ) {
-        window.onBasicFormRef.updateGhsxLoaction();
-        postDebug('bbtotal applyPayload -> updateGhsxLoaction()');
-      }
-
-      return true;
-    } catch (error) {
-      postDebug('bbtotal applyPayload error: ' + String(error));
-      return false;
+        break;
+      case 'error':
+        setState(() {
+          _isLoading = false;
+          _status = 'WebView error: ${event['description'] ?? 'unknown'}';
+          _appendDiagnostic('error: ${event['description'] ?? ''}');
+        });
+        break;
+      default:
+        setState(() {
+          _appendDiagnostic('event[$type]: $event');
+        });
+        break;
     }
-  };
-
-  const installBridge = () => {
-    window.__bbtotalPreset = payload;
-    window.__bbtotalApplyPreset = applyPayload;
-    window.__bbtotalHandleNativeCommand = handleCommand;
-
-    window.SYAppModel = window.SYAppModel || {};
-    window.SYAppModel.getLocation = () => {
-      postDebug('bbtotal bridge -> SYAppModel.getLocation()');
-      applyPayload();
-      return JSON.stringify(payload);
-    };
-    window.SYAppModel.getUpdatingLocation = () => {
-      postDebug('bbtotal bridge -> SYAppModel.getUpdatingLocation()');
-      applyPayload();
-      return JSON.stringify(payload);
-    };
-    window.SYAppModel.postMessage = (message) => handleCommand(message);
-    window.SYAppModel.hiddenTitle = () => handleCommand({ type: 'hiddenTitle' });
-    window.SYAppModel.hideNav = (hidden) =>
-      handleCommand({ function: 'config', hideNav: hidden ? 'YES' : 'NO' });
-    window.SYAppModel.getUserinfo = () => handleCommand({ type: 'getUserinfo' });
-    window.SYAppModel.getUserInfo = () => handleCommand({ type: 'getUserInfo' });
-    window.SYAppModel.getWifiinfo = () => handleCommand({ type: 'getWifiinfo' });
-    window.SYAppModel.openUrl = (url) => handleCommand({ openUrl: url });
-    window.SYAppModel.reloadData = () => handleCommand({ function: 'reloadData' });
-    window.SYAppModel.yuyueMeeting = (message) => handleCommand({ type: 'yuyueMeeting', params: message });
-    window.SYAppModel.endMeeting = (message) => handleCommand({ type: 'endMeeting', params: message });
-    window.SYAppModel.joinyuyueMeeting = (message) => handleCommand({ type: 'joinyuyueMeeting', params: message });
-    window.SYAppModel.joinyuyueZhibo = (message) => handleCommand({ type: 'joinyuyueZhibo', params: message });
-
-    window.webkit = window.webkit || {};
-    window.webkit.messageHandlers = window.webkit.messageHandlers || {};
-    window.webkit.messageHandlers.SYAppModel = {
-      postMessage: (message) => handleCommand(message),
-    };
-
-    window.android = window.SYAppModel;
-    window.Android = window.SYAppModel;
-    window.appModel = window.SYAppModel;
-    window.AppModel = window.SYAppModel;
-
-    const originalPrompt = window.prompt ? window.prompt.bind(window) : null;
-    window.prompt = (message, defaultValue) => {
-      if (typeof message === 'string' && message.includes('launchMiniProgram')) {
-        handleCommand(message);
-        return '';
-      }
-      return originalPrompt ? originalPrompt(message, defaultValue) : '';
-    };
-  };
-
-  installConsoleHooks();
-  installVConsole();
-  installNetworkHooks();
-  installBbgrxxWatcher();
-  if (!window.__bbtotalBridgeInstalled) {
-    installBridge();
-    window.__bbtotalBridgeInstalled = true;
-    postDebug('bbtotal bridge installed');
-  }
-})();
-''';
   }
 
   @override
   Widget build(BuildContext context) {
+    final TargetPlatform platform = Theme.of(context).platform;
+
     return Scaffold(
       appBar: _hideNativeChrome
           ? null
@@ -784,23 +134,15 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
               actions: <Widget>[
                 IconButton(
                   tooltip: '手动注入定位',
-                  onPressed: () async {
-                    await _controller.runJavaScript(
-                      'window.__bbtotalApplyPreset && window.__bbtotalApplyPreset();',
-                    );
-                    if (!mounted) {
-                      return;
-                    }
-                    setState(() {
-                      _status = 'Manual location injection triggered.';
-                    });
+                  onPressed: () {
+                    _nativeController.applyPreset();
                   },
                   icon: const Icon(Icons.my_location_outlined),
                 ),
                 IconButton(
                   tooltip: '刷新页面',
                   onPressed: () {
-                    _controller.reload();
+                    _nativeController.reload();
                   },
                   icon: const Icon(Icons.refresh),
                 ),
@@ -841,18 +183,23 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
             ),
           ),
           ExpansionTile(
-            title: const Text('诊断信息'),
-            subtitle: const Text('查看最终 URL 和页面错误内容'),
+            title: const Text('桥接状态'),
+            subtitle: const Text('查看事件流和最终 URL'),
             childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             children: <Widget>[
               SelectableText(
-                'Final URL:\n${_resolvedUri.toString()}\n\n'
-                'Diagnostics:\n$_pageDiagnostics',
+                'Final URL:\n${_bundle.resolvedUri}\n\n'
+                'Origin Rule:\n${_bundle.allowedOriginRule}\n\n'
+                'Events:\n$_pageDiagnostics',
               ),
             ],
           ),
           Expanded(
-            child: WebViewWidget(controller: _controller),
+            child: NativeCheckInWebView(
+              controller: _nativeController,
+              creationParams: _bundle.creationParamsFor(platform),
+              onEvent: _handleNativeEvent,
+            ),
           ),
         ],
       ),
