@@ -179,6 +179,36 @@ class HybridBridgeService {
   applyStorage(window.localStorage, runtime.storageSeed);
   applyStorage(window.sessionStorage, runtime.storageSeed);
 
+  const locationPayload = runtime.locationPayload || {};
+
+  const deliverLocationPayload = (source) => {
+    const payload = locationPayload;
+    report('[bridge] ' + source + ' delivering locationResult ' + preview(payload));
+
+    window.setTimeout(() => {
+      try {
+        if (typeof window.locationResult === 'function') {
+          window.locationResult(payload);
+          return;
+        }
+
+        if (window.bbgrxx && typeof window.bbgrxx === 'object') {
+          window.bbgrxx.locationMsg = payload;
+          window.bbgrxx.updatingLocationMsg = payload;
+          report('[bridge] location payload applied via window.bbgrxx fallback');
+          return;
+        }
+
+        window.__bbtotalLastLocationResult = payload;
+        report('[bridge] location payload stored at window.__bbtotalLastLocationResult fallback');
+      } catch (error) {
+        const errorText =
+          error && error.stack ? String(error.stack) : preview(error);
+        report('[bridge] locationResult delivery error ' + errorText);
+      }
+    }, 0);
+  };
+
   const createSyncBridgeMethod = (name, producer) => {
     return (...args) => {
       report(
@@ -221,29 +251,20 @@ class HybridBridgeService {
     getToken: createSyncBridgeMethod('getToken', () => {
       return runtime.bridgeContext.loginToken || '';
     }),
+    getLoginToken: createSyncBridgeMethod('getLoginToken', () => {
+      return runtime.bridgeContext.loginToken || '';
+    }),
     getUserinfo: createSyncBridgeMethod('getUserinfo', () => {
       return runtime.userInfoJson || stringify(runtime.userInfo || {});
     }),
     getUserInfo: createSyncBridgeMethod('getUserInfo', () => {
       return runtime.userInfoJson || stringify(runtime.userInfo || {});
     }),
-    getLocation: createSyncBridgeMethod('getLocation', (...args) => {
-      const data = stringify(runtime.locationPayload || {});
-      for (const arg of args) {
-        if (typeof arg === 'function') {
-          try { arg(data); } catch (_) {}
-        }
-      }
-      return data;
+    getLocation: createAsyncBridgeMethod('getLocation', () => {
+      deliverLocationPayload('getLocation');
     }),
-    getUpdatingLocation: createSyncBridgeMethod('getUpdatingLocation', (...args) => {
-      const data = stringify(runtime.locationPayload || {});
-      for (const arg of args) {
-        if (typeof arg === 'function') {
-          try { arg(data); } catch (_) {}
-        }
-      }
-      return data;
+    getUpdatingLocation: createAsyncBridgeMethod('getUpdatingLocation', () => {
+      deliverLocationPayload('getUpdatingLocation');
     }),
     getWifiinfo: createSyncBridgeMethod('getWifiinfo', () => {
       return stringify(runtime.wifiInfo || {});
@@ -280,6 +301,7 @@ class HybridBridgeService {
   window.appModel = window.SYAppModel;
   window.AppModel = window.SYAppModel;
   window.getToken = bridge.getToken;
+  window.getLoginToken = bridge.getLoginToken;
   window.getUserinfo = bridge.getUserinfo;
   window.getUserInfo = bridge.getUserInfo;
 
@@ -289,6 +311,17 @@ class HybridBridgeService {
     postMessage(message) {
       const payload =
         typeof message === 'string' ? message : stringify(message || {});
+      let type = '';
+      try {
+        const parsed = typeof message === 'string' ? JSON.parse(message) : message;
+        type = parsed && typeof parsed === 'object' ? String(parsed.type || '') : '';
+      } catch (_) {}
+
+      if (type === 'getLocation' || type === 'getUpdatingLocation') {
+        report('[bridge] webkit postMessage type=' + type);
+        deliverLocationPayload('webkit:' + type);
+      }
+
       callHandler('nativePostMessage', payload);
     },
   };
