@@ -89,6 +89,7 @@ class UserLoginInfoService {
 
     final Map<String, dynamic> payload =
         jsonDecode(response.body) as Map<String, dynamic>;
+    final String rawUserInfoJson = _normalizeJsonObjectString(payload['userinfo']);
     final Map<String, dynamic> userInfo =
         _decodeJsonObject(payload['userinfo']) ?? <String, dynamic>{};
     final Map<String, dynamic> zzjgxx =
@@ -109,6 +110,7 @@ class UserLoginInfoService {
 
     return loginInfo.copyWith(
       jgbm: (payload['jgbm'] ?? userInfo['bmbh'] ?? '').toString(),
+      rawUserInfoJson: rawUserInfoJson,
       rawZzjgxxJson: payload['zzjgxx'] == null ? '' : jsonEncode(payload['zzjgxx']),
       zxbm: (payload['zxbm'] ?? userInfo['zxbm'] ?? '').toString(),
       qycode: qycode,
@@ -130,6 +132,24 @@ class UserLoginInfoService {
     }
 
     return null;
+  }
+
+  String _normalizeJsonObjectString(Object? value) {
+    if (value is String) {
+      return value;
+    }
+    if (value is Map<String, dynamic>) {
+      return jsonEncode(value);
+    }
+    if (value is Map) {
+      return jsonEncode(
+        value.map<String, dynamic>(
+          (dynamic key, dynamic mapValue) =>
+              MapEntry(key.toString(), mapValue),
+        ),
+      );
+    }
+    return '';
   }
 
   Map<String, dynamic>? _asMap(Object? value) {

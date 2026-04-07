@@ -100,6 +100,17 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pub-
 
+      - name: Restore Android SDK Components Cache
+        id: android_sdk_cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            /usr/local/lib/android/sdk/cmake/3.22.1
+            /usr/local/lib/android/sdk/licenses
+          key: ${{ runner.os }}-android-sdk-cmake-3.22.1
+          restore-keys: |
+            ${{ runner.os }}-android-sdk-cmake-
+
       - name: Flutter Pub Get
         run: flutter pub get
 
@@ -120,6 +131,15 @@ jobs:
 
       - name: Build Signed Android Release APK
         run: flutter build apk --release
+
+      - name: Save Android SDK Components Cache
+        if: always() && steps.android_sdk_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            /usr/local/lib/android/sdk/cmake/3.22.1
+            /usr/local/lib/android/sdk/licenses
+          key: ${{ runner.os }}-android-sdk-cmake-3.22.1
 
       - name: Upload Android APK Artifacts
         uses: actions/upload-artifact@v4
