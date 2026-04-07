@@ -24,6 +24,9 @@ build_logs/
 # Android
 android/.gradle/
 android/local.properties
+android/key.properties
+android/*.jks
+android/*.keystore
 
 # iOS / Flutter generated
 ios/Flutter/.last_build_id

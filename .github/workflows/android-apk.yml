@@ -67,8 +67,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     needs: analyze
+    if: github.event_name != 'pull_request'
     env:
       GRADLE_OPTS: -Dorg.gradle.vfs.watch=false
+      ANDROID_KEYSTORE_PATH: ${{ github.workspace }}/android/upload-keystore.jks
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
     steps:
       - name: Checkout
@@ -98,14 +103,29 @@ jobs:
       - name: Flutter Pub Get
         run: flutter pub get
 
-      - name: Build Android APK
-        run: flutter build apk
+      - name: Validate Android Release Signing Secrets
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$ANDROID_KEYSTORE_BASE64" || { echo "Missing secret: ANDROID_KEYSTORE_BASE64"; exit 1; }
+          test -n "$ANDROID_KEYSTORE_PASSWORD" || { echo "Missing secret: ANDROID_KEYSTORE_PASSWORD"; exit 1; }
+          test -n "$ANDROID_KEY_ALIAS" || { echo "Missing secret: ANDROID_KEY_ALIAS"; exit 1; }
+          test -n "$ANDROID_KEY_PASSWORD" || { echo "Missing secret: ANDROID_KEY_PASSWORD"; exit 1; }
+
+      - name: Materialize Android Release Keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$ANDROID_KEYSTORE_PATH"
+
+      - name: Build Signed Android Release APK
+        run: flutter build apk --release
 
       - name: Upload Android APK Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: android-apk
-          path: build/app/outputs/flutter-apk/*.apk
+          name: android-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
 
   build-ios-test-package:
@@ -139,6 +159,9 @@ jobs:
             if [ -f ios/Runner/AppDelegate.swift ]; then
               cp ios/Runner/AppDelegate.swift .ci-ios-backup/Runner/AppDelegate.swift
             fi
+            if [ -f ios/Runner/NativeCheckInWebViewFactory.swift ]; then
+              cp ios/Runner/NativeCheckInWebViewFactory.swift .ci-ios-backup/Runner/NativeCheckInWebViewFactory.swift
+            fi
             if [ -f ios/Runner/Info.plist ]; then
               cp ios/Runner/Info.plist .ci-ios-backup/Runner/Info.plist
             fi
@@ -150,6 +173,9 @@ jobs:
 
             if [ -f .ci-ios-backup/Runner/AppDelegate.swift ]; then
               cp .ci-ios-backup/Runner/AppDelegate.swift ios/Runner/AppDelegate.swift
+            fi
+            if [ -f .ci-ios-backup/Runner/NativeCheckInWebViewFactory.swift ]; then
+              cp .ci-ios-backup/Runner/NativeCheckInWebViewFactory.swift ios/Runner/NativeCheckInWebViewFactory.swift
             fi
             if [ -f .ci-ios-backup/Runner/Info.plist ]; then
               cp .ci-ios-backup/Runner/Info.plist ios/Runner/Info.plist

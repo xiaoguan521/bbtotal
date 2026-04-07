@@ -184,8 +184,8 @@ private class NativeCheckInWebView(
     override fun dispose() {
         methodChannel.setMethodCallHandler(null)
         webView.stopLoading()
-        webView.webChromeClient = null
-        webView.webViewClient = null
+        webView.webChromeClient = WebChromeClient()
+        webView.webViewClient = WebViewClient()
         webView.removeJavascriptInterface(NATIVE_BRIDGE_NAME)
         webView.destroy()
     }
