@@ -736,29 +736,6 @@ class _HybridCheckInPageState extends State<HybridCheckInPage> {
               ),
             ),
           ),
-          const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text('诊断日志', style: theme.textTheme.titleMedium),
-                  const SizedBox(height: 8),
-                  AnimatedBuilder(
-                    animation: _diagnostics,
-                    builder: (BuildContext context, Widget? child) {
-                      final String logText = _diagnostics.entries.isEmpty
-                          ? 'No bridge events yet.'
-                          : _diagnostics.entries.join('\n');
-                      return SelectableText(logText);
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
           Card(
             clipBehavior: Clip.antiAlias,
             child: Padding(
@@ -867,6 +844,28 @@ class _HybridCheckInPageState extends State<HybridCheckInPage> {
                               return NavigationActionPolicy.CANCEL;
                             },
                           ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text('诊断日志', style: theme.textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  AnimatedBuilder(
+                    animation: _diagnostics,
+                    builder: (BuildContext context, Widget? child) {
+                      final String logText = _diagnostics.entries.isEmpty
+                          ? 'No bridge events yet.'
+                          : _diagnostics.entries.join('\n');
+                      return SelectableText(logText);
+                    },
                   ),
                 ],
               ),
