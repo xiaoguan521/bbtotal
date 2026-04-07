@@ -23,7 +23,10 @@ class HybridCheckInPage extends StatefulWidget {
 }
 
 class _HybridCheckInPageState extends State<HybridCheckInPage> {
-  late final TextEditingController _targetUrlController = TextEditingController();
+  late final TextEditingController _targetUrlController = TextEditingController(
+    text:
+        'https://appsy.jbysoft.com/dxgl-app/dxslgl/#/dxslglComp/dxslglfq/index',
+  );
   late final TextEditingController _usernameController = TextEditingController();
   late final TextEditingController _addressController =
       TextEditingController(text: '河北省石家庄市鹿泉区御园路71号靠近光谷科技园');
@@ -505,7 +508,8 @@ class _HybridCheckInPageState extends State<HybridCheckInPage> {
                     keyboardType: TextInputType.url,
                     decoration: const InputDecoration(
                       labelText: '业务页面 URL',
-                      hintText: 'https://example.com/app/#/checkin',
+                      hintText:
+                          'https://appsy.jbysoft.com/dxgl-app/dxslgl/#/dxslglComp/dxslglfq/index',
                       border: OutlineInputBorder(),
                     ),
                   ),
