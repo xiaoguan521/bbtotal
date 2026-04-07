@@ -1,8 +1,16 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'pages/location_test_page.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
-void main() {
+import 'pages/hybrid_checkin_page.dart';
+
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+    await InAppWebViewController.setWebContentsDebuggingEnabled(kDebugMode);
+  }
+
   runApp(const BbtotalApp());
 }
 
@@ -17,7 +25,7 @@ class BbtotalApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF1F6FEB)),
         useMaterial3: true,
       ),
-      home: const CheckInLocationSetupPage(),
+      home: const HybridCheckInPage(),
     );
   }
 }
