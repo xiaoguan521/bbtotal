@@ -133,6 +133,24 @@ class HybridBridgeService {
     flushPendingCalls();
   });
 
+  const preview = (value, max = 240) => {
+    const raw =
+      typeof value === 'string'
+        ? value
+        : (() => {
+            try {
+              return JSON.stringify(value);
+            } catch (_) {
+              return String(value);
+            }
+          })();
+    return raw.length > max ? raw.slice(0, max) + ' ...truncated' : raw;
+  };
+
+  const report = (message) => {
+    callHandler('nativeLog', String(message || ''));
+  };
+
   const stringify = (value) => {
     try {
       return JSON.stringify(value);
@@ -158,41 +176,79 @@ class HybridBridgeService {
   applyStorage(window.localStorage, runtime.storageSeed);
   applyStorage(window.sessionStorage, runtime.storageSeed);
 
+  const createSyncBridgeMethod = (name, producer) => {
+    return (...args) => {
+      report(
+        '[bridge] ' + name + ' called args=' +
+          args.map((item) => preview(item)).join(' | '),
+      );
+      try {
+        const result = producer(...args);
+        report('[bridge] ' + name + ' returned ' + preview(result));
+        return result;
+      } catch (error) {
+        const errorText =
+          error && error.stack ? String(error.stack) : preview(error);
+        report('[bridge] ' + name + ' error ' + errorText);
+        throw error;
+      }
+    };
+  };
+
+  const createAsyncBridgeMethod = (name, action) => {
+    return (...args) => {
+      report(
+        '[bridge] ' + name + ' called args=' +
+          args.map((item) => preview(item)).join(' | '),
+      );
+      try {
+        const result = action(...args);
+        report('[bridge] ' + name + ' completed');
+        return result;
+      } catch (error) {
+        const errorText =
+          error && error.stack ? String(error.stack) : preview(error);
+        report('[bridge] ' + name + ' error ' + errorText);
+        throw error;
+      }
+    };
+  };
+
   const bridge = {
-    getToken() {
+    getToken: createSyncBridgeMethod('getToken', () => {
       return runtime.bridgeContext.loginToken || '';
-    },
-    getUserinfo() {
+    }),
+    getUserinfo: createSyncBridgeMethod('getUserinfo', () => {
       return runtime.userInfoJson || stringify(runtime.userInfo || {});
-    },
-    getUserInfo() {
+    }),
+    getUserInfo: createSyncBridgeMethod('getUserInfo', () => {
       return runtime.userInfoJson || stringify(runtime.userInfo || {});
-    },
-    getLocation() {
+    }),
+    getLocation: createSyncBridgeMethod('getLocation', () => {
       return stringify(runtime.locationPayload || {});
-    },
-    getUpdatingLocation() {
+    }),
+    getUpdatingLocation: createSyncBridgeMethod('getUpdatingLocation', () => {
       return stringify(runtime.locationPayload || {});
-    },
-    getWifiinfo() {
+    }),
+    getWifiinfo: createSyncBridgeMethod('getWifiinfo', () => {
       return stringify(runtime.wifiInfo || {});
-    },
-    postMessage(message) {
+    }),
+    postMessage: createAsyncBridgeMethod('postMessage', (message) => {
       callHandler('nativePostMessage', String(message || ''));
       return '';
-    },
-    openUrl(url) {
+    }),
+    openUrl: createAsyncBridgeMethod('openUrl', (url) => {
       callHandler('nativeOpenUrl', String(url || ''));
       return '';
-    },
-    closePage() {
+    }),
+    closePage: createAsyncBridgeMethod('closePage', () => {
       callHandler('nativeClosePage');
       return '';
-    },
-    hiddenTitle() {
-      callHandler('nativeLog', 'hiddenTitle requested');
+    }),
+    hiddenTitle: createAsyncBridgeMethod('hiddenTitle', () => {
+      report('hiddenTitle requested');
       return '';
-    },
+    }),
   };
 
   window.__bbtotalRuntime = runtime;
@@ -243,7 +299,7 @@ class HybridBridgeService {
 
   const originalFetch = window.fetch ? window.fetch.bind(window) : null;
   if (originalFetch) {
-    window.fetch = (input, init = {}) => {
+    window.fetch = async (input, init = {}) => {
       const requestUrl =
         typeof input === 'string'
           ? input
@@ -252,15 +308,28 @@ class HybridBridgeService {
         return originalFetch(input, init);
       }
 
+      report('[network] fetch -> ' + requestUrl);
       const sourceHeaders =
         init.headers ||
         (input && typeof input === 'object' && 'headers' in input
           ? input.headers
           : undefined);
-      return originalFetch(input, {
-        ...init,
-        headers: mergeHeaders(sourceHeaders),
-      });
+      try {
+        const response = await originalFetch(input, {
+          ...init,
+          headers: mergeHeaders(sourceHeaders),
+        });
+        report(
+          '[network] fetch <- ' + requestUrl + ' status=' + String(response.status),
+        );
+        return response;
+      } catch (error) {
+        report(
+          '[network] fetch !! ' + requestUrl + ' error=' +
+            (error && error.message ? error.message : preview(error)),
+        );
+        throw error;
+      }
     };
   }
 
@@ -280,12 +349,19 @@ class HybridBridgeService {
 
     xhrPrototype.open = function(method, url, ...rest) {
       this.__bbtotalUrl = url;
+      this.__bbtotalMethod = method;
       this.__bbtotalHeaders = this.__bbtotalHeaders || {};
       return originalOpen.call(this, method, url, ...rest);
     };
 
     xhrPrototype.send = function(body) {
       const requestUrl = String(this.__bbtotalUrl || '');
+      if (shouldPatchUrl(requestUrl)) {
+        report(
+          '[network] xhr -> ' +
+            String(this.__bbtotalMethod || 'GET') + ' ' + requestUrl,
+        );
+      }
       if (shouldPatchUrl(requestUrl)) {
         Object.entries(authHeaders).forEach(([key, value]) => {
           if (!value || this.__bbtotalHeaders[key.toLowerCase()] === value) {
@@ -296,12 +372,19 @@ class HybridBridgeService {
             originalSetRequestHeader.call(this, key, value);
           } catch (_) {}
         });
+        this.addEventListener('loadend', () => {
+          report(
+            '[network] xhr <- ' +
+              String(this.__bbtotalMethod || 'GET') + ' ' + requestUrl +
+              ' status=' + String(this.status),
+          );
+        }, { once: true });
       }
       return originalSend.call(this, body);
     };
   }
 
-  callHandler('nativeLog', 'document-start hybrid bridge installed');
+  report('document-start hybrid bridge installed');
   window.__bbtotalHybridInstalled = true;
 })();
 ''';
