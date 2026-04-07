@@ -23,33 +23,13 @@ build_logs/
 
 # Android
 android/.gradle/
+android/.kotlin/
 android/local.properties
 android/key.properties
 android/*.jks
 android/*.keystore
 
-# iOS / Flutter generated
-ios/Flutter/.last_build_id
-ios/Flutter/ephemeral/
-ios/Flutter/flutter_export_environment.sh
-ios/Flutter/Generated.xcconfig
-
 # Generated registrants
 **/GeneratedPluginRegistrant.java
 **/GeneratedPluginRegistrant.h
 **/GeneratedPluginRegistrant.m
-
-# Local investigation artifacts
-checkin_live_page.png
-webview_live_page.png
-inspect_devices.png
-inspect_devices_webview.png
-inspect_state_now.png
-mobile_dxgl_page.png
-location-bridge-demo.html
-location-bridge-demo.png
-browser_webview_harness.html
-browser_harness_server.ps1
-launch-browser-harness.ps1
-.browser-harness-profile/
-.browser-harness-server.pid

@@ -96,10 +96,6 @@ android {
     }
 }
 
-dependencies {
-    implementation("androidx.webkit:webkit:1.15.0")
-}
-
 flutter {
     source = "../.."
 }

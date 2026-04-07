@@ -2,10 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../models/check_in_location_preset.dart';
 import '../models/check_in_history_location.dart';
+import '../models/check_in_location_preset.dart';
 import '../models/user_login_info.dart';
-import 'check_in_webview_page.dart';
 import '../services/cheque_service.dart';
 import '../services/check_in_history_service.dart';
 import '../services/location_service.dart';
@@ -40,7 +39,7 @@ class _CheckInLocationSetupPageState extends State<CheckInLocationSetupPage> {
   bool _isLoadingHistory = false;
   bool _isLoadingCheque = false;
   bool _isResolvingLoginInfo = false;
-  String _status = 'Ready to configure the clock-in location.';
+  String _status = '已清理 WebView 实验代码，当前页面只保留打卡数据准备能力。';
 
   @override
   void initState() {
@@ -258,7 +257,7 @@ class _CheckInLocationSetupPageState extends State<CheckInLocationSetupPage> {
           cheque: chequeInfo.cheque,
           ticket: chequeInfo.ticket,
         );
-        _status = '已获取 cheque / ticket，可以进入打卡页。';
+        _status = '已获取 cheque / ticket，可作为后续应用重构的基础数据。';
       });
     } on ChequeServiceException catch (error) {
       if (!mounted) {
@@ -312,22 +311,6 @@ class _CheckInLocationSetupPageState extends State<CheckInLocationSetupPage> {
       _status = '已使用历史打卡位置：${item.address}';
       _preparedPreset = null;
     });
-  }
-
-  Future<void> _openCheckInPage() async {
-    final CheckInLocationPreset? resolvedPreset = _preparedPreset;
-    if (resolvedPreset == null) {
-      setState(() {
-        _status = '请先手动完成 Token 和 cheque 查询，再进入打卡页。';
-      });
-      return;
-    }
-
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => CheckInWebViewPage(preset: resolvedPreset),
-      ),
-    );
   }
 
   @override
@@ -424,17 +407,10 @@ class _CheckInLocationSetupPageState extends State<CheckInLocationSetupPage> {
                       ),
                     ),
                   if (_preparedPreset != null) const SizedBox(height: 16),
-                  Text('打卡页来源', style: theme.textTheme.titleMedium),
+                  Text('重构说明', style: theme.textTheme.titleMedium),
                   const SizedBox(height: 8),
                   const Text(
-                    '这个 URL 来自本次 chrome://inspect/#devices 抓到的真实 WebView 打卡页。',
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    CheckInWebViewPage.inspectedCheckInUrl,
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall,
+                    '已移除当前仓库中的 WebView / bridge 实验页。接下来会基于这里准备好的 token、cheque、ticket 和位置数据，重新设计应用内流程。',
                   ),
                 ],
               ),
@@ -511,13 +487,6 @@ class _CheckInLocationSetupPageState extends State<CheckInLocationSetupPage> {
                 onPressed: _fillWithCurrentCoordinates,
                 icon: const Icon(Icons.gps_fixed),
                 label: const Text('使用当前坐标'),
-              ),
-              FilledButton.icon(
-                onPressed: _isResolvingLoginInfo || _isLoadingCheque
-                    ? null
-                    : _openCheckInPage,
-                icon: const Icon(Icons.open_in_browser),
-                label: const Text('4. 进入打卡页'),
               ),
             ],
           ),
