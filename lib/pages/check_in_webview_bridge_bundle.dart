@@ -592,50 +592,98 @@ class CheckInWebViewBridgeBundle {
     };
   };
 
-  const buildBridgeForWindow = (targetWindow, label) => ({
-    getLocation: () => {
-      postDebug('[' + label + '] SYAppModel.getLocation()');
-      applyPayload(targetWindow);
-      return resolveLocationResult();
-    },
-    getUpdatingLocation: () => {
-      postDebug('[' + label + '] SYAppModel.getUpdatingLocation()');
-      applyPayload(targetWindow);
-      return resolveUpdatingLocationResult();
-    },
-    getUserinfo: () => {
-      postDebug('[' + label + '] SYAppModel.getUserinfo()');
-      notifyUserinfo(targetWindow);
-      return resolveUserinfoResult();
-    },
-    getUserInfo: () => {
-      postDebug('[' + label + '] SYAppModel.getUserInfo()');
-      notifyUserinfo(targetWindow);
-      return resolveUserinfoResult();
-    },
-    getWifiinfo: () => {
-      postDebug('[' + label + '] SYAppModel.getWifiinfo()');
-      notifyWifiinfo(targetWindow);
-      return resolveWifiInfoResult();
-    },
-    postMessage: (message) => dispatchNativeCommand(message),
-    hiddenTitle: () => dispatchNativeCommand({ type: 'hiddenTitle' }),
-    hideNav: (hidden) =>
-      dispatchNativeCommand({
-        function: 'config',
-        hideNav: hidden ? 'YES' : 'NO',
+  const buildBridgeForWindow = (targetWindow, label) => {
+    const wrapBridgeMethod = (methodName, handler) => (...args) => {
+      postDebug(
+        '[' + label + '] SYAppModel.' + methodName + ' called args=' +
+          args.map((item) => stringifyForLog(item)).join(' | '),
+      );
+      try {
+        const result = handler(...args);
+        postDebug(
+          '[' + label + '] SYAppModel.' + methodName + ' ok result=' +
+            stringifyForLog(result).slice(0, 800),
+        );
+        return result;
+      } catch (error) {
+        const errorText =
+          error && error.stack
+            ? String(error.stack)
+            : stringifyForLog(error);
+        postDebug(
+          '[' + label + '] SYAppModel.' + methodName + ' error: ' + errorText,
+        );
+        throw error;
+      }
+    };
+
+    return {
+      getLocation: wrapBridgeMethod('getLocation', () => {
+        applyPayload(targetWindow);
+        return resolveLocationResult();
       }),
-    openUrl: (url) => dispatchNativeCommand({ openUrl: url }),
-    reloadData: () => dispatchNativeCommand({ function: 'reloadData' }),
-    yuyueMeeting: (message) =>
-      dispatchNativeCommand({ type: 'yuyueMeeting', params: message }),
-    endMeeting: (message) =>
-      dispatchNativeCommand({ type: 'endMeeting', params: message }),
-    joinyuyueMeeting: (message) =>
-      dispatchNativeCommand({ type: 'joinyuyueMeeting', params: message }),
-    joinyuyueZhibo: (message) =>
-      dispatchNativeCommand({ type: 'joinyuyueZhibo', params: message }),
-  });
+      getUpdatingLocation: wrapBridgeMethod('getUpdatingLocation', () => {
+        applyPayload(targetWindow);
+        return resolveUpdatingLocationResult();
+      }),
+      getUserinfo: wrapBridgeMethod('getUserinfo', () => {
+        notifyUserinfo(targetWindow);
+        return resolveUserinfoResult();
+      }),
+      getUserInfo: wrapBridgeMethod('getUserInfo', () => {
+        notifyUserinfo(targetWindow);
+        return resolveUserinfoResult();
+      }),
+      getWifiinfo: wrapBridgeMethod('getWifiinfo', () => {
+        notifyWifiinfo(targetWindow);
+        return resolveWifiInfoResult();
+      }),
+      postMessage: wrapBridgeMethod(
+        'postMessage',
+        (message) => dispatchNativeCommand(message),
+      ),
+      hiddenTitle: wrapBridgeMethod(
+        'hiddenTitle',
+        () => dispatchNativeCommand({ type: 'hiddenTitle' }),
+      ),
+      hideNav: wrapBridgeMethod(
+        'hideNav',
+        (hidden) =>
+          dispatchNativeCommand({
+            function: 'config',
+            hideNav: hidden ? 'YES' : 'NO',
+          }),
+      ),
+      openUrl: wrapBridgeMethod(
+        'openUrl',
+        (url) => dispatchNativeCommand({ openUrl: url }),
+      ),
+      reloadData: wrapBridgeMethod(
+        'reloadData',
+        () => dispatchNativeCommand({ function: 'reloadData' }),
+      ),
+      yuyueMeeting: wrapBridgeMethod(
+        'yuyueMeeting',
+        (message) =>
+          dispatchNativeCommand({ type: 'yuyueMeeting', params: message }),
+      ),
+      endMeeting: wrapBridgeMethod(
+        'endMeeting',
+        (message) =>
+          dispatchNativeCommand({ type: 'endMeeting', params: message }),
+      ),
+      joinyuyueMeeting: wrapBridgeMethod(
+        'joinyuyueMeeting',
+        (message) =>
+          dispatchNativeCommand({ type: 'joinyuyueMeeting', params: message }),
+      ),
+      joinyuyueZhibo: wrapBridgeMethod(
+        'joinyuyueZhibo',
+        (message) =>
+          dispatchNativeCommand({ type: 'joinyuyueZhibo', params: message }),
+      ),
+    };
+  };
 
   const installIntoWindow = (targetWindow, rawLabel = 'main') => {
     if (!targetWindow || targetWindow.__bbtotalWindowBridgeInstalled) {
