@@ -159,9 +159,6 @@ jobs:
             if [ -f ios/Runner/AppDelegate.swift ]; then
               cp ios/Runner/AppDelegate.swift .ci-ios-backup/Runner/AppDelegate.swift
             fi
-            if [ -f ios/Runner/NativeCheckInWebViewFactory.swift ]; then
-              cp ios/Runner/NativeCheckInWebViewFactory.swift .ci-ios-backup/Runner/NativeCheckInWebViewFactory.swift
-            fi
             if [ -f ios/Runner/Info.plist ]; then
               cp ios/Runner/Info.plist .ci-ios-backup/Runner/Info.plist
             fi
@@ -173,9 +170,6 @@ jobs:
 
             if [ -f .ci-ios-backup/Runner/AppDelegate.swift ]; then
               cp .ci-ios-backup/Runner/AppDelegate.swift ios/Runner/AppDelegate.swift
-            fi
-            if [ -f .ci-ios-backup/Runner/NativeCheckInWebViewFactory.swift ]; then
-              cp .ci-ios-backup/Runner/NativeCheckInWebViewFactory.swift ios/Runner/NativeCheckInWebViewFactory.swift
             fi
             if [ -f .ci-ios-backup/Runner/Info.plist ]; then
               cp .ci-ios-backup/Runner/Info.plist ios/Runner/Info.plist
