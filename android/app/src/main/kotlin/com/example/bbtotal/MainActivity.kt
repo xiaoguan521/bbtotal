@@ -8,6 +8,11 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
+        flutterEngine.platformViewsController.registry.registerViewFactory(
+            NATIVE_CHECKIN_VIEW_TYPE,
+            NativeCheckInWebViewFactory(flutterEngine.dartExecutor.binaryMessenger),
+        )
+
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             CHANNEL_NAME,
@@ -32,6 +37,7 @@ class MainActivity : FlutterActivity() {
 
     companion object {
         private const val CHANNEL_NAME = "bbtotal/mock_location"
+        private const val NATIVE_CHECKIN_VIEW_TYPE = "bbtotal/native_checkin_webview"
         private var mockLocation: Map<String, Any?>? = null
     }
 }

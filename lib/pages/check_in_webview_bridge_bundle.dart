@@ -345,11 +345,6 @@ class CheckInWebViewBridgeBundle {
   const wifiInfo = $wifiInfoJson;
   const bridgeContext = $bridgeContextJson;
   const trackedFrames = new WeakSet();
-  const vConsoleSources = [
-    'https://unpkg.com/vconsole@latest/dist/vconsole.min.js',
-    'https://cdn.jsdelivr.net/npm/vconsole@latest/dist/vconsole.min.js',
-  ];
-
   let postDebug = (_) => {};
   let dispatchNativeCommand = () => '';
   let resolveLocationResult = () => JSON.stringify(payload);
@@ -660,65 +655,6 @@ class CheckInWebViewBridgeBundle {
     } catch (_) {}
   };
 
-  const installVConsole = (targetWindow, label) => {
-    const targetDocument = targetWindow.document;
-    if (
-      !targetDocument ||
-      !targetDocument.documentElement ||
-      targetWindow.__bbtotalVConsoleDisabled
-    ) {
-      return;
-    }
-
-    const createInstance = () => {
-      if (targetWindow.VConsole && !targetWindow.__bbtotalVConsole) {
-        try {
-          targetWindow.__bbtotalVConsole = new targetWindow.VConsole();
-          postDebug('[' + label + '] vConsole installed');
-        } catch (error) {
-          postDebug(
-            '[' + label + '] vConsole init failed: ' + stringifyForLog(error),
-          );
-        }
-      }
-    };
-
-    if (targetWindow.VConsole) {
-      createInstance();
-      return;
-    }
-
-    if (targetWindow.__bbtotalVConsoleLoading) {
-      return;
-    }
-
-    targetWindow.__bbtotalVConsoleLoading = true;
-    const script = targetDocument.createElement('script');
-    script.id = 'bbtotal-vconsole-script';
-    let sourceIndex = 0;
-
-    const loadNext = () => {
-      if (sourceIndex >= vConsoleSources.length) {
-        targetWindow.__bbtotalVConsoleDisabled = true;
-        postDebug('[' + label + '] vConsole load failed for all sources');
-        return;
-      }
-      script.src = vConsoleSources[sourceIndex];
-      sourceIndex += 1;
-    };
-
-    script.onload = () => {
-      createInstance();
-    };
-    script.onerror = () => {
-      postDebug('[' + label + '] vConsole source failed: ' + script.src);
-      loadNext();
-    };
-
-    loadNext();
-    targetDocument.documentElement.appendChild(script);
-  };
-
   const installNetworkHooks = (targetWindow, label) => {
     if (targetWindow.__bbtotalNetworkPatched) {
       return;
@@ -959,7 +895,6 @@ class CheckInWebViewBridgeBundle {
     installConsoleHooks(targetWindow, label);
     installNetworkHooks(targetWindow, label);
     installPromptProxy(targetWindow);
-    installVConsole(targetWindow, label);
     installUserContextHooks(targetWindow, label);
     ensureUserContext(targetWindow, { label });
     setTimeout(() => ensureUserContext(targetWindow, { label }), 0);

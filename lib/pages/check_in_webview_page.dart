@@ -1,6 +1,8 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
@@ -24,15 +26,42 @@ class CheckInWebViewPage extends StatefulWidget {
 }
 
 class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
+  static const String _androidViewType = 'bbtotal/native_checkin_webview';
+  static const String _androidChannelPrefix = 'bbtotal/native_checkin_webview';
+
   late final CheckInWebViewBridgeBundle _bundle =
       CheckInWebViewBridgeBundle.fromPreset(widget.preset);
-  late final WebViewController _controller = _createController();
+  late final bool _useNativeAndroidWebView =
+      defaultTargetPlatform == TargetPlatform.android;
+
+  WebViewController? _controller;
+  MethodChannel? _androidChannel;
 
   bool _hideNativeChrome = false;
   bool _isLoading = true;
   bool _bridgeInjectedForCurrentPage = false;
   String _pageDiagnostics = 'No bridge events yet.';
-  String _status = 'Opening check-in page with webview_flutter...';
+  String _status = 'Opening check-in page...';
+
+  @override
+  void initState() {
+    super.initState();
+    if (_useNativeAndroidWebView) {
+      _status = 'Opening check-in page with native Android WebView...';
+      _appendDiagnostic(
+        'log: Android native WebView path selected for document-start bridge.',
+      );
+    } else {
+      _status = 'Opening check-in page with webview_flutter...';
+      _controller = _createController();
+    }
+  }
+
+  @override
+  void dispose() {
+    _androidChannel?.setMethodCallHandler(null);
+    super.dispose();
+  }
 
   void _appendDiagnostic(String message) {
     final String current = _pageDiagnostics == 'No bridge events yet.'
@@ -54,6 +83,18 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
       }
     } catch (_) {}
     return null;
+  }
+
+  Map<String, dynamic> _normalizeMap(Object? value) {
+    if (value is Map<String, dynamic>) {
+      return value;
+    }
+    if (value is Map) {
+      return value.map<String, dynamic>(
+        (dynamic key, dynamic mapValue) => MapEntry(key.toString(), mapValue),
+      );
+    }
+    return <String, dynamic>{};
   }
 
   WebViewController _createController() {
@@ -150,10 +191,167 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
     return controller;
   }
 
-  Future<void> _injectBridge({required String reason}) async {
+  Future<void> _handleAndroidViewCreated(int viewId) async {
+    final MethodChannel channel =
+        MethodChannel('$_androidChannelPrefix' '_$viewId');
+    _androidChannel = channel;
+    channel.setMethodCallHandler(_handleAndroidMethodCall);
+
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _appendDiagnostic('log: Android native WebView created (viewId=$viewId).');
+    });
+
     try {
-      await _controller.runJavaScript(_bundle.flutterRuntimeScript);
-      await _controller.runJavaScript(
+      await channel.invokeMethod<void>('initialize');
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _appendDiagnostic('log: Android native WebView initialized.');
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isLoading = false;
+        _status = 'Native Android WebView initialization failed: $error';
+        _appendDiagnostic('error: nativeInitFailed: $error');
+      });
+    }
+  }
+
+  Future<Object?> _handleAndroidMethodCall(MethodCall call) async {
+    if (!mounted) {
+      return null;
+    }
+
+    switch (call.method) {
+      case 'log':
+        final String message = (call.arguments ?? '').toString();
+        setState(() {
+          _appendDiagnostic('log: $message');
+        });
+        return null;
+      case 'pageStarted':
+        final String url = (call.arguments ?? '').toString();
+        _bridgeInjectedForCurrentPage = true;
+        setState(() {
+          _isLoading = true;
+          _status = 'Loading check-in page...';
+          _appendDiagnostic('pageStarted: $url');
+        });
+        return null;
+      case 'pageFinished':
+        final String url = (call.arguments ?? '').toString();
+        setState(() {
+          _isLoading = false;
+          _status =
+              'Android native bridge ready. WebView can be inspected via chrome://inspect.';
+          _appendDiagnostic('pageFinished: $url');
+        });
+        return null;
+      case 'progress':
+        final int progress = switch (call.arguments) {
+          final int value => value,
+          final num value => value.toInt(),
+          _ => 0,
+        };
+        if (progress == 100 || progress == 5) {
+          setState(() {
+            _appendDiagnostic('progress: $progress');
+          });
+        }
+        return null;
+      case 'error':
+        final Map<String, dynamic> error = _normalizeMap(call.arguments);
+        final String description = (error['description'] ?? 'unknown').toString();
+        setState(() {
+          _isLoading = false;
+          _status = 'WebView error: $description';
+          _appendDiagnostic('error: $description');
+        });
+        return null;
+      case 'bridgeControl':
+        final String raw = (call.arguments ?? '').toString();
+        final Map<String, dynamic>? command = _decodeCommand(raw);
+        if (command == null) {
+          setState(() {
+            _appendDiagnostic('bridgeControlRaw: $raw');
+          });
+          return null;
+        }
+        _handleBridgeControl(command);
+        return null;
+      default:
+        setState(() {
+          _appendDiagnostic('nativeCall: ${call.method} ${call.arguments}');
+        });
+        return null;
+    }
+  }
+
+  Future<void> _reloadPage() async {
+    if (_useNativeAndroidWebView) {
+      final MethodChannel? channel = _androidChannel;
+      if (channel == null) {
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _appendDiagnostic('reloadSkipped: Android native channel not ready yet.');
+        });
+        return;
+      }
+      await channel.invokeMethod<void>('reload');
+      return;
+    }
+
+    await _controller?.reload();
+  }
+
+  Future<void> _injectBridge({required String reason}) async {
+    if (_useNativeAndroidWebView) {
+      final MethodChannel? channel = _androidChannel;
+      if (channel == null) {
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _appendDiagnostic(
+            'bridgeApplySkipped[$reason]: Android native channel not ready yet.',
+          );
+        });
+        return;
+      }
+
+      try {
+        await channel.invokeMethod<void>('applyPreset');
+        _bridgeInjectedForCurrentPage = true;
+
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _appendDiagnostic('bridgePresetApplied: $reason');
+        });
+      } catch (error) {
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _appendDiagnostic('bridgePresetApplyFailed[$reason]: $error');
+        });
+      }
+      return;
+    }
+
+    try {
+      await _controller!.runJavaScript(_bundle.flutterRuntimeScript);
+      await _controller!.runJavaScript(
         'window.__bbtotalApplyPreset && window.__bbtotalApplyPreset();',
       );
       _bridgeInjectedForCurrentPage = true;
@@ -193,7 +391,7 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
       return;
     }
     if (type == 'openUrl') {
-      final String url = (command['url'] ?? '').toString();
+      final String url = (command['url'] ?? command['openUrl'] ?? '').toString();
       setState(() {
         _status = 'H5 requested openUrl: $url';
         _appendDiagnostic('bridgeControl: $command');
@@ -206,8 +404,8 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
       }
       return;
     }
-    if (type == 'reload') {
-      _controller.reload();
+    if (type == 'reload' || command['function'] == 'reloadData') {
+      _reloadPage();
     }
     setState(() {
       _appendDiagnostic('bridgeControl: $command');
@@ -232,7 +430,7 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
                 IconButton(
                   tooltip: '刷新页面',
                   onPressed: () {
-                    _controller.reload();
+                    _reloadPage();
                   },
                   icon: const Icon(Icons.refresh),
                 ),
@@ -285,7 +483,16 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
             ],
           ),
           Expanded(
-            child: WebViewWidget(controller: _controller),
+            child: _useNativeAndroidWebView
+                ? AndroidView(
+                    viewType: _androidViewType,
+                    creationParams: _bundle.creationParamsFor(
+                      TargetPlatform.android,
+                    ),
+                    creationParamsCodec: const StandardMessageCodec(),
+                    onPlatformViewCreated: _handleAndroidViewCreated,
+                  )
+                : WebViewWidget(controller: _controller!),
           ),
         ],
       ),
