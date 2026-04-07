@@ -2,6 +2,15 @@ name: Mobile Packages
 
 on:
   workflow_dispatch:
+    inputs:
+      android_build_mode:
+        description: Android build mode
+        required: false
+        default: debug
+        type: choice
+        options:
+          - debug
+          - release
   push:
     branches:
       - main
@@ -108,7 +117,35 @@ jobs:
       - name: Flutter Pub Get
         run: flutter pub get
 
+      - name: Determine Android Build Mode
+        id: build_mode
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            mode="${{ inputs.android_build_mode }}"
+          else
+            mode="release"
+          fi
+
+          case "$mode" in
+            debug)
+              echo "artifact_name=android-debug-apk" >> "$GITHUB_OUTPUT"
+              echo "apk_path=build/app/outputs/flutter-apk/app-debug.apk" >> "$GITHUB_OUTPUT"
+              ;;
+            release)
+              echo "artifact_name=android-release-apk" >> "$GITHUB_OUTPUT"
+              echo "apk_path=build/app/outputs/flutter-apk/app-release.apk" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "Unsupported build mode: $mode"
+              exit 1
+              ;;
+          esac
+
+          echo "build_mode=$mode" >> "$GITHUB_OUTPUT"
+
       - name: Validate Android Release Signing Secrets
+        if: steps.build_mode.outputs.build_mode == 'release'
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
@@ -118,13 +155,14 @@ jobs:
           test -n "$ANDROID_KEY_PASSWORD" || { echo "Missing secret: ANDROID_KEY_PASSWORD"; exit 1; }
 
       - name: Materialize Android Release Keystore
+        if: steps.build_mode.outputs.build_mode == 'release'
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$ANDROID_KEYSTORE_PATH"
 
-      - name: Build Signed Android Release APK
-        run: flutter build apk --release
+      - name: Build Android APK
+        run: flutter build apk --${{ steps.build_mode.outputs.build_mode }}
 
       - name: Save Android SDK Components Cache
         if: always() && steps.android_sdk_cache.outputs.cache-hit != 'true'
@@ -138,6 +176,6 @@ jobs:
       - name: Upload Android APK Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: android-release-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          name: ${{ steps.build_mode.outputs.artifact_name }}
+          path: ${{ steps.build_mode.outputs.apk_path }}
           if-no-files-found: error
