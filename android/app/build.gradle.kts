@@ -1,6 +1,9 @@
 import java.io.File
 import java.util.Properties
 
+import java.io.File
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -94,10 +97,6 @@ android {
             }
         }
     }
-}
-
-dependencies {
-    implementation("androidx.webkit:webkit:1.12.0")
 }
 
 flutter {

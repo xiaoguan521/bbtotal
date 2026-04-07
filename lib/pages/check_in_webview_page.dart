@@ -1,8 +1,12 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:webview_flutter/webview_flutter.dart';
+import 'package:webview_flutter_android/webview_flutter_android.dart';
+import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 
 import '../models/check_in_location_preset.dart';
 import 'check_in_webview_bridge_bundle.dart';
-import 'native_check_in_webview.dart';
 
 class CheckInWebViewPage extends StatefulWidget {
   const CheckInWebViewPage({
@@ -22,13 +26,13 @@ class CheckInWebViewPage extends StatefulWidget {
 class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
   late final CheckInWebViewBridgeBundle _bundle =
       CheckInWebViewBridgeBundle.fromPreset(widget.preset);
-  final NativeCheckInWebViewController _nativeController =
-      NativeCheckInWebViewController();
+  late final WebViewController _controller = _createController();
 
   bool _hideNativeChrome = false;
   bool _isLoading = true;
+  bool _bridgeInjectedForCurrentPage = false;
   String _pageDiagnostics = 'No bridge events yet.';
-  String _status = 'Opening check-in page with the native bridge...';
+  String _status = 'Opening check-in page with webview_flutter...';
 
   void _appendDiagnostic(String message) {
     final String current = _pageDiagnostics == 'No bridge events yet.'
@@ -37,12 +41,146 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
     _pageDiagnostics = current.isEmpty ? message : '$current\n$message';
   }
 
+  Map<String, dynamic>? _decodeCommand(String raw) {
+    try {
+      final Object decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+      if (decoded is Map) {
+        return decoded.map<String, dynamic>(
+          (dynamic key, dynamic value) => MapEntry(key.toString(), value),
+        );
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  WebViewController _createController() {
+    late final PlatformWebViewControllerCreationParams params;
+    if (WebViewPlatform.instance is WebKitWebViewPlatform) {
+      params = WebKitWebViewControllerCreationParams(
+        allowsInlineMediaPlayback: true,
+        mediaTypesRequiringUserAction: const <PlaybackMediaTypes>{},
+      );
+    } else {
+      params = const PlatformWebViewControllerCreationParams();
+    }
+
+    final WebViewController controller = WebViewController
+        .fromPlatformCreationParams(params)
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(const Color(0x00000000))
+      ..addJavaScriptChannel(
+        'bbtotalDebug',
+        onMessageReceived: (JavaScriptMessage message) {
+          if (!mounted) {
+            return;
+          }
+          setState(() {
+            _appendDiagnostic('log: ${message.message}');
+          });
+        },
+      )
+      ..addJavaScriptChannel(
+        'bbtotalBridgeControl',
+        onMessageReceived: (JavaScriptMessage message) {
+          final Map<String, dynamic>? command = _decodeCommand(message.message);
+          if (command == null) {
+            return;
+          }
+          _handleBridgeControl(command);
+        },
+      )
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onPageStarted: (String url) {
+            _bridgeInjectedForCurrentPage = false;
+            if (!mounted) {
+              return;
+            }
+            setState(() {
+              _isLoading = true;
+              _status = 'Loading check-in page...';
+              _appendDiagnostic('pageStarted: $url');
+            });
+            _injectBridge(reason: 'pageStarted');
+          },
+          onProgress: (int progress) {
+            if (!_bridgeInjectedForCurrentPage && progress >= 5) {
+              _injectBridge(reason: 'progress=$progress');
+            }
+          },
+          onPageFinished: (String url) {
+            _injectBridge(reason: 'pageFinished');
+            if (!mounted) {
+              return;
+            }
+            setState(() {
+              _isLoading = false;
+              _status =
+                  'webview_flutter bridge installed. Android can be inspected via chrome://inspect.';
+              _appendDiagnostic('pageFinished: $url');
+            });
+          },
+          onWebResourceError: (WebResourceError error) {
+            if (!mounted) {
+              return;
+            }
+            setState(() {
+              _isLoading = false;
+              _status = 'WebView error: ${error.description}';
+              _appendDiagnostic('error: ${error.description}');
+            });
+          },
+        ),
+      )
+      ..loadRequest(_bundle.resolvedUri);
+
+    if (controller.platform is AndroidWebViewController) {
+      AndroidWebViewController.enableDebugging(true);
+      final AndroidWebViewController androidController =
+          controller.platform as AndroidWebViewController;
+      androidController.setMediaPlaybackRequiresUserGesture(false);
+      _appendDiagnostic(
+        'log: Android WebView debugging enabled. Use chrome://inspect.',
+      );
+    }
+
+    return controller;
+  }
+
+  Future<void> _injectBridge({required String reason}) async {
+    try {
+      await _controller.runJavaScript(_bundle.flutterRuntimeScript);
+      await _controller.runJavaScript(
+        'window.__bbtotalApplyPreset && window.__bbtotalApplyPreset();',
+      );
+      _bridgeInjectedForCurrentPage = true;
+
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _appendDiagnostic('bridgeInjected: $reason');
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _appendDiagnostic('bridgeInjectionFailed[$reason]: $error');
+      });
+    }
+  }
+
   void _handleBridgeControl(Map<String, dynamic> command) {
     final String type = (command['type'] ?? '').toString();
     if (type == 'hiddenTitle') {
       setState(() {
         _hideNativeChrome = true;
         _status = 'Native title hidden by bridge request.';
+        _appendDiagnostic('bridgeControl: $command');
       });
       return;
     }
@@ -50,6 +188,7 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
       setState(() {
         _hideNativeChrome = false;
         _status = 'Native title shown by bridge request.';
+        _appendDiagnostic('bridgeControl: $command');
       });
       return;
     }
@@ -57,6 +196,7 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
       final String url = (command['url'] ?? '').toString();
       setState(() {
         _status = 'H5 requested openUrl: $url';
+        _appendDiagnostic('bridgeControl: $command');
       });
       return;
     }
@@ -67,65 +207,15 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
       return;
     }
     if (type == 'reload') {
-      _nativeController.reload();
+      _controller.reload();
     }
-  }
-
-  void _handleNativeEvent(Map<String, dynamic> event) {
-    if (!mounted) {
-      return;
-    }
-
-    final String type = (event['type'] ?? '').toString();
-    switch (type) {
-      case 'pageStarted':
-        setState(() {
-          _isLoading = true;
-          _status = 'Loading check-in page...';
-          _appendDiagnostic('pageStarted: ${event['url'] ?? ''}');
-        });
-        break;
-      case 'pageFinished':
-        setState(() {
-          _isLoading = false;
-          _status = 'Native bridge is ready before page scripts run.';
-          _appendDiagnostic('pageFinished: ${event['url'] ?? ''}');
-        });
-        break;
-      case 'bridgeControl':
-        final Object? rawCommand = event['command'];
-        if (rawCommand is Map) {
-          final Map<String, dynamic> command = rawCommand.map<String, dynamic>(
-            (dynamic key, dynamic value) => MapEntry(key.toString(), value),
-          );
-          _appendDiagnostic('bridgeControl: $command');
-          _handleBridgeControl(command);
-        }
-        break;
-      case 'log':
-        setState(() {
-          _appendDiagnostic('log: ${event['message'] ?? ''}');
-        });
-        break;
-      case 'error':
-        setState(() {
-          _isLoading = false;
-          _status = 'WebView error: ${event['description'] ?? 'unknown'}';
-          _appendDiagnostic('error: ${event['description'] ?? ''}');
-        });
-        break;
-      default:
-        setState(() {
-          _appendDiagnostic('event[$type]: $event');
-        });
-        break;
-    }
+    setState(() {
+      _appendDiagnostic('bridgeControl: $command');
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final TargetPlatform platform = Theme.of(context).platform;
-
     return Scaffold(
       appBar: _hideNativeChrome
           ? null
@@ -135,14 +225,14 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
                 IconButton(
                   tooltip: '手动注入定位',
                   onPressed: () {
-                    _nativeController.applyPreset();
+                    _injectBridge(reason: 'manual');
                   },
                   icon: const Icon(Icons.my_location_outlined),
                 ),
                 IconButton(
                   tooltip: '刷新页面',
                   onPressed: () {
-                    _nativeController.reload();
+                    _controller.reload();
                   },
                   icon: const Icon(Icons.refresh),
                 ),
@@ -195,11 +285,7 @@ class _CheckInWebViewPageState extends State<CheckInWebViewPage> {
             ],
           ),
           Expanded(
-            child: NativeCheckInWebView(
-              controller: _nativeController,
-              creationParams: _bundle.creationParamsFor(platform),
-              onEvent: _handleNativeEvent,
-            ),
+            child: WebViewWidget(controller: _controller),
           ),
         ],
       ),

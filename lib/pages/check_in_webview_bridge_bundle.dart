@@ -110,6 +110,36 @@ class CheckInWebViewBridgeBundle {
     };
   }
 
+  String get flutterRuntimeScript {
+    return _buildBaseStartupScript(
+      bridgeContextJson: bridgeContextJson,
+      bridgeInstallScript: '''
+  postDebug = (message) => {
+    try {
+      window.bbtotalDebug.postMessage(String(message));
+    } catch (_) {}
+  };
+
+  dispatchNativeCommand = (command) => {
+    const raw =
+      typeof command === 'string' ? command : JSON.stringify(command || {});
+    try {
+      window.bbtotalBridgeControl.postMessage(raw);
+    } catch (_) {}
+    return '';
+  };
+
+  resolveLocationResult = () => JSON.stringify(payload);
+  resolveUpdatingLocationResult = () => JSON.stringify(payload);
+  resolveUserinfoResult = () => JSON.stringify(userinfoResult);
+  resolveWifiInfoResult = () => JSON.stringify(wifiInfo);
+''',
+      locationPayloadJson: locationPayloadJson,
+      userinfoResultJson: userinfoResultJson,
+      wifiInfoJson: wifiInfoJson,
+    );
+  }
+
   static String _buildAllowedOriginRule(Uri uri) {
     final String portSuffix = uri.hasPort ? ':${uri.port}' : '';
     return '${uri.scheme}://${uri.host}$portSuffix';
@@ -362,12 +392,12 @@ class CheckInWebViewBridgeBundle {
     return fallbackLabel;
   };
 
-  const notifyUserinfo = (targetWindow = window) => {
+  const notifyUserinfo = (targetWindow = window, contextValue = userinfoResult) => {
     if (typeof targetWindow.getUserinfoResult === 'function') {
-      targetWindow.getUserinfoResult(JSON.stringify(userinfoResult));
+      targetWindow.getUserinfoResult(JSON.stringify(contextValue));
     }
     if (typeof targetWindow.getUserInfoResult === 'function') {
-      targetWindow.getUserInfoResult(JSON.stringify(userinfoResult));
+      targetWindow.getUserInfoResult(JSON.stringify(contextValue));
     }
   };
 
@@ -416,12 +446,9 @@ class CheckInWebViewBridgeBundle {
     return JSON.stringify(payload);
   };
 
-  const ensureUserContext = (targetWindow, options = {}) => {
-    const label = options.label || frameLabel(targetWindow, 'main');
+  const mergeUserContextObject = (currentValue) => {
     const current =
-      targetWindow.bbgrxx && typeof targetWindow.bbgrxx === 'object'
-        ? targetWindow.bbgrxx
-        : {};
+      currentValue && typeof currentValue === 'object' ? currentValue : {};
     const base = deepClone(userinfoResult) || {};
     const next = {
       ...base,
@@ -470,6 +497,28 @@ class CheckInWebViewBridgeBundle {
         : {};
     next.loadState = next.loadState ?? true;
 
+    return next;
+  };
+
+  const ensureUserContext = (targetWindow, options = {}) => {
+    const label = options.label || frameLabel(targetWindow, 'main');
+    const next = mergeUserContextObject(targetWindow.bbgrxx);
+
+    if (typeof targetWindow.__bbtotalSyncUserContext === 'function') {
+      const synced = targetWindow.__bbtotalSyncUserContext(
+        next,
+        'ensureUserContext',
+      );
+      if (!targetWindow.__bbtotalUserContextLogged) {
+        targetWindow.__bbtotalUserContextLogged = true;
+        postDebug(
+          '[' + label + '] user context ready zzjgxx.results=' +
+            String(!!(synced.zzjgxx && synced.zzjgxx.results)),
+        );
+      }
+      return synced;
+    }
+
     targetWindow.bbgrxx = next;
     targetWindow.userinfo = next;
     try {
@@ -485,6 +534,88 @@ class CheckInWebViewBridgeBundle {
     }
 
     return next;
+  };
+
+  const installUserContextHooks = (targetWindow, label) => {
+    if (targetWindow.__bbtotalUserContextHooked) {
+      return;
+    }
+
+    let bbgrxxValue = mergeUserContextObject(targetWindow.bbgrxx);
+    let userinfoValue = mergeUserContextObject(targetWindow.userinfo || bbgrxxValue);
+    let bbgrxx2Value = (() => {
+      try {
+        return JSON.stringify(bbgrxxValue);
+      } catch (_) {
+        return '';
+      }
+    })();
+
+    const syncAll = (sourceValue, sourceName) => {
+      const merged = mergeUserContextObject(sourceValue);
+      bbgrxxValue = merged;
+      userinfoValue = merged;
+      try {
+        bbgrxx2Value = JSON.stringify(merged);
+      } catch (_) {
+        bbgrxx2Value = '';
+      }
+      postDebug(
+        '[' + label + '] user context synced from ' + sourceName +
+          ' zzjgxx.results=' + String(!!(merged.zzjgxx && merged.zzjgxx.results)),
+      );
+      return merged;
+    };
+
+    try {
+      targetWindow.__bbtotalSyncUserContext = syncAll;
+
+      Object.defineProperty(targetWindow, 'bbgrxx', {
+        configurable: true,
+        enumerable: true,
+        get() {
+          return bbgrxxValue;
+        },
+        set(value) {
+          syncAll(value, 'bbgrxx');
+        },
+      });
+
+      Object.defineProperty(targetWindow, 'userinfo', {
+        configurable: true,
+        enumerable: true,
+        get() {
+          return userinfoValue;
+        },
+        set(value) {
+          syncAll(value, 'userinfo');
+        },
+      });
+
+      Object.defineProperty(targetWindow, 'bbgrxx2', {
+        configurable: true,
+        enumerable: true,
+        get() {
+          return bbgrxx2Value;
+        },
+        set(value) {
+          if (typeof value === 'string') {
+            try {
+              syncAll(JSON.parse(value), 'bbgrxx2');
+              return;
+            } catch (_) {}
+          }
+          syncAll(value, 'bbgrxx2');
+        },
+      });
+
+      targetWindow.__bbtotalUserContextHooked = true;
+      syncAll(bbgrxxValue, 'bootstrap');
+    } catch (error) {
+      postDebug(
+        '[' + label + '] user context hook failed: ' + stringifyForLog(error),
+      );
+    }
   };
 
   const installConsoleHooks = (targetWindow, label) => {
@@ -736,12 +867,14 @@ class CheckInWebViewBridgeBundle {
         return resolveUpdatingLocationResult();
       }),
       getUserinfo: wrapBridgeMethod('getUserinfo', () => {
-        notifyUserinfo(targetWindow);
-        return resolveUserinfoResult();
+        const contextValue = ensureUserContext(targetWindow, { label });
+        notifyUserinfo(targetWindow, contextValue);
+        return JSON.stringify(contextValue);
       }),
       getUserInfo: wrapBridgeMethod('getUserInfo', () => {
-        notifyUserinfo(targetWindow);
-        return resolveUserinfoResult();
+        const contextValue = ensureUserContext(targetWindow, { label });
+        notifyUserinfo(targetWindow, contextValue);
+        return JSON.stringify(contextValue);
       }),
       getWifiinfo: wrapBridgeMethod('getWifiinfo', () => {
         notifyWifiinfo(targetWindow);
@@ -827,6 +960,7 @@ class CheckInWebViewBridgeBundle {
     installNetworkHooks(targetWindow, label);
     installPromptProxy(targetWindow);
     installVConsole(targetWindow, label);
+    installUserContextHooks(targetWindow, label);
     ensureUserContext(targetWindow, { label });
     setTimeout(() => ensureUserContext(targetWindow, { label }), 0);
     setTimeout(() => ensureUserContext(targetWindow, { label }), 150);
