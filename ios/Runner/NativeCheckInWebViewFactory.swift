@@ -37,6 +37,7 @@ final class NativeCheckInWebView: NSObject, FlutterPlatformView {
   private let urlString: String
   private let webView: WKWebView
   private let nativeBridgeHandler: WeakScriptMessageHandler
+  private let nativeLogHandler: WeakScriptMessageHandler
   private let syAppModelHandler: WeakScriptMessageHandler
 
   init(
@@ -67,16 +68,22 @@ final class NativeCheckInWebView: NSObject, FlutterPlatformView {
       binaryMessenger: messenger
     )
     self.nativeBridgeHandler = WeakScriptMessageHandler()
+    self.nativeLogHandler = WeakScriptMessageHandler()
     self.syAppModelHandler = WeakScriptMessageHandler()
 
     super.init()
 
     nativeBridgeHandler.delegate = self
+    nativeLogHandler.delegate = self
     syAppModelHandler.delegate = self
 
     userContentController.add(
       nativeBridgeHandler,
       name: Self.nativeBridgeHandlerName
+    )
+    userContentController.add(
+      nativeLogHandler,
+      name: Self.nativeLogHandlerName
     )
     userContentController.add(
       syAppModelHandler,
@@ -103,6 +110,9 @@ final class NativeCheckInWebView: NSObject, FlutterPlatformView {
     methodChannel.setMethodCallHandler(nil)
     webView.configuration.userContentController.removeScriptMessageHandler(
       forName: Self.nativeBridgeHandlerName
+    )
+    webView.configuration.userContentController.removeScriptMessageHandler(
+      forName: Self.nativeLogHandlerName
     )
     webView.configuration.userContentController.removeScriptMessageHandler(
       forName: Self.syAppModelHandlerName
@@ -273,6 +283,7 @@ final class NativeCheckInWebView: NSObject, FlutterPlatformView {
   }
 
   private static let nativeBridgeHandlerName = "bbtotalNativeBridge"
+  private static let nativeLogHandlerName = "bbtotalNativeLog"
   private static let syAppModelHandlerName = "SYAppModel"
 }
 
@@ -339,6 +350,13 @@ extension NativeCheckInWebView: WKScriptMessageHandler {
     _ userContentController: WKUserContentController,
     didReceive message: WKScriptMessage
   ) {
+    if message.name == Self.nativeLogHandlerName {
+      if let logMessage = normalizeMessageString(body: message.body) {
+        sendLog(logMessage)
+      }
+      return
+    }
+
     handleBridgeMessage(normalizeMessageString(body: message.body))
   }
 }

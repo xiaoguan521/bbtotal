@@ -365,6 +365,13 @@ private class NativeCheckInWebView(
         fun postMessage(message: String?) {
             handleBridgeMessage(message)
         }
+
+        @JavascriptInterface
+        fun log(message: String?) {
+            if (!message.isNullOrBlank()) {
+                sendLog(message)
+            }
+        }
     }
 
     companion object {
