@@ -36,7 +36,9 @@ class _CheckInLocationSetupPageState extends State<CheckInLocationSetupPage> {
 
   List<CheckInHistoryLocation> _historyLocations = <CheckInHistoryLocation>[];
   UserLoginInfo? _loginInfo;
+  CheckInLocationPreset? _preparedPreset;
   bool _isLoadingHistory = false;
+  bool _isLoadingCheque = false;
   bool _isResolvingLoginInfo = false;
   String _status = 'Ready to configure the clock-in location.';
 
@@ -78,6 +80,34 @@ class _CheckInLocationSetupPageState extends State<CheckInLocationSetupPage> {
         _status = error.message;
       });
     }
+  }
+
+  CheckInLocationPreset? _buildPresetFromInputs(UserLoginInfo loginInfo) {
+    final String address = _addressController.text.trim();
+    final double? longitude = double.tryParse(_longitudeController.text.trim());
+    final double? latitude = double.tryParse(_latitudeController.text.trim());
+
+    if (address.isEmpty || longitude == null || latitude == null) {
+      setState(() {
+        _status = '请先填写或选择有效的地址、经度和纬度。';
+      });
+      return null;
+    }
+
+    return CheckInLocationPreset(
+      address: address,
+      longitude: longitude,
+      latitude: latitude,
+      loginInfo: loginInfo,
+      province: '河北省',
+      city: '石家庄市',
+      district: '鹿泉区',
+      street: '御园路',
+      cityCode: '0311',
+      provinceCode: '130000',
+      adCode: '130110',
+      provinceReferred: '冀',
+    );
   }
 
   Future<UserLoginInfo?> _fetchMobileLoginInfo() async {
@@ -201,6 +231,74 @@ class _CheckInLocationSetupPageState extends State<CheckInLocationSetupPage> {
     }
   }
 
+  Future<void> _fetchChequeInfo() async {
+    final UserLoginInfo? loginInfo = _loginInfo ?? await _fetchMobileLoginInfo();
+    if (!mounted || loginInfo == null) {
+      return;
+    }
+
+    final CheckInLocationPreset? preset = _buildPresetFromInputs(loginInfo);
+    if (preset == null) {
+      return;
+    }
+
+    setState(() {
+      _isLoadingCheque = true;
+      _status = '正在查询 cheque / ticket...';
+    });
+
+    try {
+      final chequeInfo = await _chequeService.fetchCheque(preset);
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _preparedPreset = preset.copyWith(
+          cheque: chequeInfo.cheque,
+          ticket: chequeInfo.ticket,
+        );
+        _status = '已获取 cheque / ticket，可以进入打卡页。';
+      });
+    } on ChequeServiceException catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        final String debugText =
+            _chequeService.lastDebugInfo?.toMultilineText() ?? '';
+        _status = 'cheque / ticket 查询失败：${error.message}'
+            '${debugText.isEmpty ? '' : '\n\n$debugText'}';
+      });
+    } on TimeoutException {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        final String debugText =
+            _chequeService.lastDebugInfo?.toMultilineText() ?? '';
+        _status = 'cheque / ticket 查询超时。'
+            '${debugText.isEmpty ? '' : '\n\n$debugText'}';
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        final String debugText =
+            _chequeService.lastDebugInfo?.toMultilineText() ?? '';
+        _status = 'cheque / ticket 查询失败：$error'
+            '${debugText.isEmpty ? '' : '\n\n$debugText'}';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingCheque = false;
+        });
+      }
+    }
+  }
+
   void _applyHistoryLocation(CheckInHistoryLocation item) {
     if (item.longitude == null || item.latitude == null) {
       return;
@@ -212,88 +310,16 @@ class _CheckInLocationSetupPageState extends State<CheckInLocationSetupPage> {
 
     setState(() {
       _status = '已使用历史打卡位置：${item.address}';
+      _preparedPreset = null;
     });
   }
 
   Future<void> _openCheckInPage() async {
-    final String address = _addressController.text.trim();
-    final double? longitude = double.tryParse(_longitudeController.text.trim());
-    final double? latitude = double.tryParse(_latitudeController.text.trim());
-
-    if (address.isEmpty || longitude == null || latitude == null) {
+    final CheckInLocationPreset? resolvedPreset = _preparedPreset;
+    if (resolvedPreset == null) {
       setState(() {
-        _status = 'Address, longitude and latitude are all required.';
+        _status = '请先手动完成 Token 和 cheque 查询，再进入打卡页。';
       });
-      return;
-    }
-
-    final UserLoginInfo? loginInfo = await _fetchMobileLoginInfo();
-    if (!mounted || loginInfo == null) {
-      return;
-    }
-
-    final preset = CheckInLocationPreset(
-      address: address,
-      longitude: longitude,
-      latitude: latitude,
-      loginInfo: loginInfo,
-      province: '河北省',
-      city: '石家庄市',
-      district: '鹿泉区',
-      street: '御园路',
-      cityCode: '0311',
-      provinceCode: '130000',
-      adCode: '130110',
-      provinceReferred: '冀',
-    );
-
-    setState(() {
-      _status = '正在查询 cheque / ticket...';
-    });
-
-    CheckInLocationPreset resolvedPreset = preset;
-    try {
-      final chequeInfo = await _chequeService.fetchCheque(preset);
-      resolvedPreset = preset.copyWith(
-        cheque: chequeInfo.cheque,
-        ticket: chequeInfo.ticket,
-      );
-      if (mounted) {
-        setState(() {
-          _status = '已获取 cheque / ticket，准备打开打卡页。';
-        });
-      }
-    } on ChequeServiceException catch (error) {
-      if (mounted) {
-        setState(() {
-          final String debugText =
-              _chequeService.lastDebugInfo?.toMultilineText() ?? '';
-          _status = 'cheque / ticket 查询失败，使用现有 URL 参数继续打开：'
-              '${error.message}'
-              '${debugText.isEmpty ? '' : '\n\n$debugText'}';
-        });
-      }
-    } on TimeoutException {
-      if (mounted) {
-        setState(() {
-          final String debugText =
-              _chequeService.lastDebugInfo?.toMultilineText() ?? '';
-          _status = 'cheque / ticket 查询超时，使用现有 URL 参数继续打开。'
-              '${debugText.isEmpty ? '' : '\n\n$debugText'}';
-        });
-      }
-    } catch (error) {
-      if (mounted) {
-        setState(() {
-          final String debugText =
-              _chequeService.lastDebugInfo?.toMultilineText() ?? '';
-          _status = 'cheque / ticket 查询失败，使用现有 URL 参数继续打开：$error'
-              '${debugText.isEmpty ? '' : '\n\n$debugText'}';
-        });
-      }
-    }
-
-    if (!mounted) {
       return;
     }
 
@@ -384,6 +410,20 @@ class _CheckInLocationSetupPageState extends State<CheckInLocationSetupPage> {
                       ),
                     ),
                   if (_loginInfo != null) const SizedBox(height: 16),
+                  if (_preparedPreset != null)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEFF7EE),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '已准备 cheque: ${_preparedPreset!.cheque}\n'
+                        'ticket: ${_preparedPreset!.ticket}',
+                      ),
+                    ),
+                  if (_preparedPreset != null) const SizedBox(height: 16),
                   Text('打卡页来源', style: theme.textTheme.titleMedium),
                   const SizedBox(height: 8),
                   const Text(
@@ -453,14 +493,19 @@ class _CheckInLocationSetupPageState extends State<CheckInLocationSetupPage> {
               FilledButton.icon(
                 onPressed: _isResolvingLoginInfo ? null : _fetchMobileLoginInfo,
                 icon: const Icon(Icons.badge_outlined),
-                label: Text(_isResolvingLoginInfo ? '查询中...' : '查询移动端Token'),
+                label: Text(_isResolvingLoginInfo ? '查询中...' : '1. 查询移动端Token'),
+              ),
+              FilledButton.icon(
+                onPressed: _isLoadingCheque ? null : _fetchChequeInfo,
+                icon: const Icon(Icons.verified_outlined),
+                label: Text(_isLoadingCheque ? '查询中...' : '2. 查询Cheque'),
               ),
               FilledButton.icon(
                 onPressed: _isLoadingHistory
                     ? null
                     : () => _fetchRecentHistoryLocations(),
                 icon: const Icon(Icons.history),
-                label: Text(_isLoadingHistory ? '查询中...' : '最近5天历史位置'),
+                label: Text(_isLoadingHistory ? '查询中...' : '3. 查询历史位置'),
               ),
               FilledButton.icon(
                 onPressed: _fillWithCurrentCoordinates,
@@ -468,9 +513,11 @@ class _CheckInLocationSetupPageState extends State<CheckInLocationSetupPage> {
                 label: const Text('使用当前坐标'),
               ),
               FilledButton.icon(
-                onPressed: _isResolvingLoginInfo ? null : _openCheckInPage,
+                onPressed: _isResolvingLoginInfo || _isLoadingCheque
+                    ? null
+                    : _openCheckInPage,
                 icon: const Icon(Icons.open_in_browser),
-                label: const Text('进入打卡页'),
+                label: const Text('4. 进入打卡页'),
               ),
             ],
           ),
