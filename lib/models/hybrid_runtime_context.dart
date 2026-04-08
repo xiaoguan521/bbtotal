@@ -10,12 +10,14 @@ class HybridRuntimeContext {
     required this.loginInfo,
     required this.preset,
     required this.userInfoObject,
+    required this.launchPayload,
   });
 
   factory HybridRuntimeContext.fromInputs({
     required String baseUrl,
     UserLoginInfo? loginInfo,
     CheckInLocationPreset? preset,
+    Map<String, dynamic>? launchPayload,
   }) {
     final Uri resolvedUri = preset != null
         ? preset.buildCheckInUri(baseUrl)
@@ -27,6 +29,9 @@ class HybridRuntimeContext {
       loginInfo: loginInfo,
       preset: preset,
       userInfoObject: _buildUserInfoObject(loginInfo, preset),
+      launchPayload: launchPayload == null
+          ? const <String, dynamic>{}
+          : Map<String, dynamic>.unmodifiable(launchPayload),
     );
   }
 
@@ -35,6 +40,7 @@ class HybridRuntimeContext {
   final UserLoginInfo? loginInfo;
   final CheckInLocationPreset? preset;
   final Map<String, dynamic> userInfoObject;
+  final Map<String, dynamic> launchPayload;
 
   String get origin {
     final String port = resolvedUri.hasPort ? ':${resolvedUri.port}' : '';
@@ -42,6 +48,7 @@ class HybridRuntimeContext {
   }
 
   String get userInfoJson => jsonEncode(userInfoObject);
+  String get launchPayloadJson => jsonEncode(launchPayload);
 
   Map<String, dynamic> get locationPayload {
     if (preset != null) {
@@ -78,6 +85,9 @@ class HybridRuntimeContext {
         'zzjgdmz': loginInfo?.zzjgdmz ?? '',
         'ticket': preset?.ticket ?? loginInfo?.ticket ?? '',
         'cheque': preset?.cheque ?? '',
+        'dx_29_sbsbm': preset?.deviceIdentifier ?? '',
+        'sbsbm': preset?.deviceIdentifier ?? '',
+        'deviceId': preset?.deviceIdentifier ?? '',
       };
 
   Map<String, String> get authHeaders {
@@ -112,7 +122,14 @@ class HybridRuntimeContext {
         if ((preset?.ticket ?? loginInfo?.ticket ?? '').isNotEmpty)
           'ticket': preset?.ticket ?? loginInfo?.ticket ?? '',
         if ((preset?.cheque ?? '').isNotEmpty) 'cheque': preset!.cheque,
+        if ((preset?.deviceIdentifier ?? '').isNotEmpty)
+          'dx_29_sbsbm': preset!.deviceIdentifier,
+        if ((preset?.deviceIdentifier ?? '').isNotEmpty)
+          'sbsbm': preset!.deviceIdentifier,
+        if ((preset?.deviceIdentifier ?? '').isNotEmpty)
+          'deviceId': preset!.deviceIdentifier,
         if (userInfoObject.isNotEmpty) 'userinfo': userInfoJson,
+        if (launchPayload.isNotEmpty) 'params2': launchPayloadJson,
       };
 
   List<HybridCookieSeed> get cookieSeeds => storageSeed.entries
@@ -134,6 +151,8 @@ class HybridRuntimeContext {
         'storageSeed': storageSeed,
         'userInfo': userInfoObject,
         'userInfoJson': userInfoJson,
+        'launchPayload': launchPayload,
+        'launchPayloadJson': launchPayloadJson,
         'locationPayload': locationPayload,
         'wifiInfo': wifiInfo,
       };

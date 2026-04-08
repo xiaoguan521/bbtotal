@@ -135,10 +135,13 @@ class _HybridWebViewPageState extends State<HybridWebViewPage> {
       _hybridBridgeService.registerHandlers(
         controller: controller,
         onLog: (String message) => _log('js: $message'),
-        onPostMessage: (String payload) => _log('postMessage: $payload'),
+        onPostMessage: (String payload) {
+          _log('postMessage: $payload');
+          unawaited(_handleOpenUrlRequest(payload, source: 'postMessage'));
+        },
         onOpenUrl: (String url) {
           _log('openUrl requested: $url');
-          _showMessage('页面请求打开新地址：$url');
+          unawaited(_handleOpenUrlRequest(url, source: 'bridge'));
         },
         onClosePage: () {
           _log('closePage requested');
@@ -174,6 +177,169 @@ class _HybridWebViewPageState extends State<HybridWebViewPage> {
 
   Future<void> _reloadEmbeddedPage() async {
     await _webViewController?.reload();
+  }
+
+  Future<void> _handleOpenUrlRequest(
+    String rawPayload, {
+    required String source,
+  }) async {
+    final _HybridNavigationTarget? target = _resolveNavigationTarget(rawPayload);
+    if (target == null) {
+      _log('openUrl ignored ($source): empty or unrecognized payload');
+      return;
+    }
+
+    _log('openUrl resolved ($source): ${target.uri}');
+
+    if (!target.preferExternal && _isEmbeddableUri(target.uri)) {
+      await _openChildPage(target);
+      return;
+    }
+
+    if (target.uri.scheme == 'tel') {
+      _showMessage('当前容器暂不支持直接拨号：${target.uri.path}');
+      return;
+    }
+
+    _showMessage('页面请求打开外部地址：${target.uri}');
+  }
+
+  Future<void> _openChildPage(_HybridNavigationTarget target) async {
+    if (!mounted) {
+      return;
+    }
+
+    final HybridRuntimeContext childContext = HybridRuntimeContext.fromInputs(
+      baseUrl: target.uri.toString(),
+      loginInfo: widget.runtimeContext.loginInfo,
+      preset: widget.runtimeContext.preset,
+      launchPayload: target.launchPayload,
+    );
+
+    final MaterialPageRoute<void> route = MaterialPageRoute<void>(
+      builder: (BuildContext context) => HybridWebViewPage(
+        runtimeContext: childContext,
+        title: target.title,
+      ),
+    );
+
+    if (target.replaceCurrent) {
+      await Navigator.of(context).pushReplacement(route);
+      return;
+    }
+
+    await Navigator.of(context).push(route);
+  }
+
+  bool _isEmbeddableUri(Uri uri) {
+    return <String>{'http', 'https', 'file', 'about', 'data'}.contains(uri.scheme);
+  }
+
+  _HybridNavigationTarget? _resolveNavigationTarget(String rawPayload) {
+    final String payload = rawPayload.trim();
+    if (payload.isEmpty) {
+      return null;
+    }
+
+    final Map<String, dynamic>? decoded = _decodePromptPayload(payload);
+    if (decoded != null) {
+      final String? pushUrl = _firstNonEmptyString(<Object?>[decoded['pushURL']]);
+      final String? embeddedUrl = _firstNonEmptyString(<Object?>[
+        pushUrl,
+        decoded['url'],
+        decoded['href'],
+      ]);
+      final String? externalUrl = _firstNonEmptyString(<Object?>[
+        decoded['openUrl'],
+      ]);
+      final Uri? uri = embeddedUrl != null
+          ? _parseTargetUri(embeddedUrl)
+          : _parseExternalUri(externalUrl);
+      if (uri == null) {
+        return null;
+      }
+      return _HybridNavigationTarget(
+        uri: uri,
+        preferExternal: embeddedUrl == null && externalUrl != null,
+        replaceCurrent: (decoded['push']?.toString() == '1') &&
+            (decoded['hidden']?.toString() == '1'),
+        launchPayload: decoded,
+        title:
+            _firstNonEmptyString(<Object?>[
+              decoded['title'],
+              decoded['hqsxmc'],
+              decoded['name'],
+            ]) ??
+            _deriveTitleFromUri(uri),
+      );
+    }
+
+    final Uri? uri = _parseTargetUri(payload);
+    if (uri == null) {
+      return null;
+    }
+    return _HybridNavigationTarget(
+      uri: uri,
+      title: _deriveTitleFromUri(uri),
+    );
+  }
+
+  String? _firstNonEmptyString(List<Object?> values) {
+    for (final Object? value in values) {
+      final String text = value?.toString().trim() ?? '';
+      if (text.isNotEmpty) {
+        return text;
+      }
+    }
+    return null;
+  }
+
+  Uri? _parseTargetUri(String? rawUrl) {
+    final String value = rawUrl?.trim() ?? '';
+    if (value.isEmpty) {
+      return null;
+    }
+
+    Uri? uri = Uri.tryParse(value);
+    uri ??= Uri.tryParse(Uri.encodeFull(value));
+    if (uri == null) {
+      return null;
+    }
+    if (uri.hasScheme) {
+      return uri;
+    }
+    return widget.runtimeContext.resolvedUri.resolveUri(uri);
+  }
+
+  Uri? _parseExternalUri(String? rawUrl) {
+    final String value = rawUrl?.trim() ?? '';
+    if (value.isEmpty) {
+      return null;
+    }
+
+    if (value.startsWith('http://') || value.startsWith('https://')) {
+      return Uri.tryParse(value);
+    }
+
+    return Uri.tryParse('http://$value');
+  }
+
+  String _deriveTitleFromUri(Uri uri) {
+    final String? directTitle = uri.queryParameters['title'];
+    if (directTitle != null && directTitle.trim().isNotEmpty) {
+      return directTitle;
+    }
+
+    final String fragment = uri.fragment;
+    if (fragment.isNotEmpty) {
+      final Uri? fragmentUri = Uri.tryParse('https://placeholder$fragment');
+      final String? fragmentTitle = fragmentUri?.queryParameters['title'];
+      if (fragmentTitle != null && fragmentTitle.trim().isNotEmpty) {
+        return fragmentTitle;
+      }
+    }
+
+    return widget.title;
   }
 
   Future<JsPromptResponse?> _handleJsPrompt(
@@ -405,6 +571,8 @@ class _HybridWebViewPageState extends State<HybridWebViewPage> {
                   isInspectable: kDebugMode,
                   mediaPlaybackRequiresUserGesture: false,
                   allowsInlineMediaPlayback: true,
+                  javaScriptCanOpenWindowsAutomatically: true,
+                  supportMultipleWindows: true,
                   useShouldOverrideUrlLoading: true,
                 ),
                 initialUserScripts:
@@ -445,6 +613,17 @@ class _HybridWebViewPageState extends State<HybridWebViewPage> {
                     'console[${consoleMessage.messageLevel}]: ${consoleMessage.message}',
                   );
                 },
+                onCreateWindow: (controller, createWindowAction) async {
+                  final WebUri? webUri = createWindowAction.request.url;
+                  final String rawTarget = webUri?.toString() ?? '';
+                  _log('createWindow requested: $rawTarget');
+                  if (rawTarget.isNotEmpty) {
+                    unawaited(
+                      _handleOpenUrlRequest(rawTarget, source: 'window.open'),
+                    );
+                  }
+                  return false;
+                },
                 onJsPrompt: _handleJsPrompt,
                 onReceivedError: (controller, request, error) {
                   _log('error: ${request.url} -> ${error.description}');
@@ -483,4 +662,20 @@ class _HybridWebViewPageState extends State<HybridWebViewPage> {
       ),
     );
   }
+}
+
+class _HybridNavigationTarget {
+  const _HybridNavigationTarget({
+    required this.uri,
+    required this.title,
+    this.preferExternal = false,
+    this.replaceCurrent = false,
+    this.launchPayload = const <String, dynamic>{},
+  });
+
+  final Uri uri;
+  final String title;
+  final bool preferExternal;
+  final bool replaceCurrent;
+  final Map<String, dynamic> launchPayload;
 }

@@ -124,6 +124,11 @@ class CheckInLocationPreset {
     if (loginInfo.zzjgdmz.isNotEmpty) {
       queryParameters['zzjgdmz'] = loginInfo.zzjgdmz;
     }
+    if (deviceIdentifier.isNotEmpty) {
+      queryParameters['dx_29_sbsbm'] = deviceIdentifier;
+      queryParameters['sbsbm'] = deviceIdentifier;
+      queryParameters['deviceId'] = deviceIdentifier;
+    }
     if (cheque.isNotEmpty) {
       queryParameters['cheque'] = cheque;
     }

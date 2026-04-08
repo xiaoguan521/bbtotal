@@ -183,6 +183,12 @@ class HybridBridgeService {
   applyStorage(window.localStorage, runtime.storageSeed);
   applyStorage(window.sessionStorage, runtime.storageSeed);
 
+  window.__bbtotalLaunchPayload = runtime.launchPayload || {};
+  window.__bbtotalLaunchPayloadJson = runtime.launchPayloadJson || '';
+  if (!window.params2 && runtime.launchPayloadJson) {
+    window.params2 = runtime.launchPayloadJson;
+  }
+
   const locationPayload = runtime.locationPayload || {};
   const wifiPayload = runtime.wifiInfo || {};
   const resolvedUrl = (() => {
