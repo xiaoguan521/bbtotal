@@ -126,32 +126,47 @@ class _HybridWebViewPageState extends State<HybridWebViewPage> {
 
   Future<void> _initializeWebView(InAppWebViewController controller) async {
     _webViewController = controller;
-    _hybridBridgeService.registerHandlers(
-      controller: controller,
-      onLog: (String message) => _log('js: $message'),
-      onPostMessage: (String payload) => _log('postMessage: $payload'),
-      onOpenUrl: (String url) {
-        _log('openUrl requested: $url');
-        _showMessage('页面请求打开新地址：$url');
-      },
-      onClosePage: () {
-        _log('closePage requested');
-        if (mounted) {
-          Navigator.of(context).maybePop();
-        }
-      },
-    );
+    _log('initializeWebView start: ${widget.runtimeContext.resolvedUri}');
 
-    await _hybridBridgeService.bootstrapCookies(
-      widget.runtimeContext,
-      onLog: _log,
-    );
+    try {
+      _hybridBridgeService.registerHandlers(
+        controller: controller,
+        onLog: (String message) => _log('js: $message'),
+        onPostMessage: (String payload) => _log('postMessage: $payload'),
+        onOpenUrl: (String url) {
+          _log('openUrl requested: $url');
+          _showMessage('页面请求打开新地址：$url');
+        },
+        onClosePage: () {
+          _log('closePage requested');
+          if (mounted) {
+            Navigator.of(context).maybePop();
+          }
+        },
+      );
+      _log('initializeWebView handlers registered');
 
-    await controller.loadUrl(
-      urlRequest: URLRequest(
+      await _hybridBridgeService.bootstrapCookies(
+        widget.runtimeContext,
+        onLog: _log,
+      );
+
+      final URLRequest request = URLRequest(
         url: WebUri(widget.runtimeContext.resolvedUri.toString()),
-      ),
-    );
+      );
+      _log('initializeWebView loading url: ${request.url}');
+      await controller.loadUrl(urlRequest: request);
+      _log('initializeWebView loadUrl invoked');
+    } catch (error, stackTrace) {
+      _log('initializeWebView failed: $error');
+      _log(stackTrace.toString());
+      _showMessage('页面初始化失败：$error');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   Future<void> _reloadEmbeddedPage() async {
