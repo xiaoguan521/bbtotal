@@ -13,6 +13,7 @@ import '../services/cheque_service.dart';
 import '../services/hybrid_bridge_service.dart';
 import '../services/hybrid_diagnostics_service.dart';
 import '../services/location_service.dart';
+import '../services/pending_todo_service.dart';
 import '../services/user_login_info_service.dart';
 
 class HybridCheckInPage extends StatefulWidget {
@@ -23,10 +24,6 @@ class HybridCheckInPage extends StatefulWidget {
 }
 
 class _HybridCheckInPageState extends State<HybridCheckInPage> {
-  late final TextEditingController _targetUrlController = TextEditingController(
-    text:
-        'https://appsy.jbysoft.com/dxgl-app/dxslgl/#/dxslglComp/dxslglfq/index',
-  );
   late final TextEditingController _usernameController = TextEditingController();
   late final TextEditingController _addressController =
       TextEditingController(text: '河北省石家庄市鹿泉区御园路71号靠近光谷科技园');
@@ -38,9 +35,19 @@ class _HybridCheckInPageState extends State<HybridCheckInPage> {
   final LocationService _locationService = LocationService();
   final ChequeService _chequeService = ChequeService();
   final CheckInHistoryService _checkInHistoryService = CheckInHistoryService();
+  final PendingTodoService _pendingTodoService = PendingTodoService();
   final UserLoginInfoService _userLoginInfoService = UserLoginInfoService();
   final HybridBridgeService _hybridBridgeService = const HybridBridgeService();
   final HybridDiagnosticsService _diagnostics = HybridDiagnosticsService();
+
+  static const String _initiateBaseUrl =
+      'https://appsy.jbysoft.com/dxgl-app/dxslgl/#/dxslglComp/dxslglfq/index';
+  static const String _approvalBaseUrl =
+      'https://appsy.jbysoft.com/dxgl-app/dxslgl/#/dxslglComp/dxslglsp/index';
+  static const String _initiateZtConfig =
+      '7171a46ae52cd9c7c0278a72c65492b0fd234129620126cd57ac2fccaaec061b0abed44bcb02786c4057648caf5b99b6c4e7488567e1d5fa7399b6cf5fdeb7ea09b27db192ee5320e008c8c888a156ab41012aa0eea91e2a034cd260ee71bc6e6c20b42e49633af74bfc77a9e1142c02c45548a3e3e89cc6a93eda4ca371a379';
+  static const String _approvalZtConfig =
+      '7171a46ae52cd9c7c0278a72c65492b0fd234129620126cd57ac2fccaaec061b0abed44bcb02786c4057648caf5b99b6a47cd85e2d21008f7399b6cf5fdeb7ea09b27db192ee5320e008c8c888a156ab41012aa0eea91e2a034cd260ee71bc6e6c20b42e49633af74bfc77a9e1142c02c45548a3e3e89cc6a93eda4ca371a379';
 
   List<CheckInHistoryLocation> _historyLocations = <CheckInHistoryLocation>[];
   UserLoginInfo? _loginInfo;
@@ -50,6 +57,7 @@ class _HybridCheckInPageState extends State<HybridCheckInPage> {
   Key _webViewKey = UniqueKey();
   bool _isLoadingHistory = false;
   bool _isLoadingCheque = false;
+  bool _isLoadingPendingTodos = false;
   bool _isResolvingLoginInfo = false;
   bool _isLoadingWebView = false;
   double _webProgress = 0;
@@ -323,6 +331,125 @@ class _HybridCheckInPageState extends State<HybridCheckInPage> {
     }
   }
 
+  Future<void> _openPendingTodoPage() async {
+    final UserLoginInfo? loginInfo = _loginInfo ?? await _fetchMobileLoginInfo();
+    if (!mounted || loginInfo == null) {
+      return;
+    }
+
+    setState(() {
+      _isLoadingPendingTodos = true;
+      _status = '正在查询待办...';
+    });
+
+    try {
+      final Map<String, dynamic> payload =
+          await _pendingTodoService.fetchPendingTodos(loginInfo);
+      if (!mounted) {
+        return;
+      }
+
+      final List<Map<String, dynamic>> items = _extractTodoItems(payload);
+      if (items.isEmpty) {
+        setState(() {
+          _status = '没有查询到可用待办。';
+        });
+        _log('Fetched pending todos: 0 items.');
+        return;
+      }
+
+      final CheckInLocationPreset? preset = await _ensurePreparedPreset(loginInfo);
+      if (!mounted) {
+        return;
+      }
+
+      final String approvalUrl = _buildApprovalPageUrl(
+        loginInfo: loginInfo,
+        todo: items.first,
+        cheque: preset?.cheque ?? '',
+      );
+      _log(
+        'Fetched pending todos: ${items.length} items, opening first businessKey='
+        '${_readNestedString(items.first, 'bpmxq', 'businessKey')}.',
+      );
+      _openEmbeddedPage(
+        approvalUrl,
+        preset: preset,
+        statusMessage: '正在打开待办处理页面...',
+      );
+    } on PendingTodoServiceException catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _status = error.message;
+      });
+    } on TimeoutException {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _status = '待办查询超时，请稍后重试。';
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _status = '待办查询失败：$error';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingPendingTodos = false;
+        });
+      }
+    }
+  }
+
+  List<Map<String, dynamic>> _extractTodoItems(Map<String, dynamic> payload) {
+    final Object? results = payload['results'];
+    if (results is List) {
+      return results
+          .whereType<Map>()
+          .map(
+            (Map item) => item.map<String, dynamic>(
+              (dynamic key, dynamic value) => MapEntry(key.toString(), value),
+            ),
+          )
+          .toList();
+    }
+
+    return <Map<String, dynamic>>[];
+  }
+
+  String _readNestedString(
+    Map<String, dynamic> payload,
+    String section,
+    String key,
+  ) {
+    final Object? group = payload[section];
+    if (group is Map<String, dynamic>) {
+      return (group[key] ?? '').toString();
+    }
+    if (group is Map) {
+      return (group[key] ?? '').toString();
+    }
+    return '';
+  }
+
+  Future<CheckInLocationPreset?> _ensurePreparedPreset(
+    UserLoginInfo loginInfo,
+  ) async {
+    final CheckInLocationPreset? current = _preparedPreset;
+    if (current != null && current.cheque.isNotEmpty) {
+      return current;
+    }
+
+    await _fetchChequeInfo();
+    return _preparedPreset ?? _buildPresetFromInputs(loginInfo);
+  }
+
   void _applyHistoryLocation(CheckInHistoryLocation item) {
     if (item.longitude == null || item.latitude == null) {
       return;
@@ -346,24 +473,17 @@ class _HybridCheckInPageState extends State<HybridCheckInPage> {
     });
   }
 
-  void _openEmbeddedPage() {
-    final String rawUrl = _targetUrlController.text.trim();
-    if (rawUrl.isEmpty) {
-      setState(() {
-        _status = '请输入要承载的业务页面 URL。';
-      });
-      return;
-    }
-
+  void _openEmbeddedPage(
+    String rawUrl, {
+    CheckInLocationPreset? preset,
+    String statusMessage = '正在打开内嵌页面...',
+  }) {
     try {
-      final CheckInLocationPreset? fallbackPreset = _loginInfo == null
-          ? null
-          : (_preparedPreset ?? _buildPresetFromInputs(_loginInfo!));
       final HybridRuntimeContext runtimeContext =
           HybridRuntimeContext.fromInputs(
         baseUrl: rawUrl,
         loginInfo: _loginInfo,
-        preset: fallbackPreset,
+        preset: preset,
       );
 
       _diagnostics.clear();
@@ -374,13 +494,132 @@ class _HybridCheckInPageState extends State<HybridCheckInPage> {
         _webViewKey = UniqueKey();
         _webProgress = 0;
         _isLoadingWebView = true;
-        _status = '正在打开内嵌页面...';
+        _status = statusMessage;
       });
     } catch (error) {
       setState(() {
         _status = 'URL 无效：$error';
       });
     }
+  }
+
+  Future<void> _openInitiatePage() async {
+    final UserLoginInfo? loginInfo = _loginInfo ?? await _fetchMobileLoginInfo();
+    if (!mounted || loginInfo == null) {
+      return;
+    }
+
+    final CheckInLocationPreset? preset = await _ensurePreparedPreset(loginInfo);
+    if (!mounted) {
+      return;
+    }
+
+    final String initiateUrl = _buildInitiatePageUrl(loginInfo);
+    _openEmbeddedPage(
+      initiateUrl,
+      preset: preset,
+      statusMessage: '正在打开主动发起页面...',
+    );
+  }
+
+  String _buildInitiatePageUrl(UserLoginInfo loginInfo) {
+    final String orgNumber =
+        loginInfo.zxbm.isNotEmpty ? loginInfo.zxbm : loginInfo.jgbh;
+    return _buildHashRouteUrl(
+      _initiateBaseUrl,
+      <String, String>{
+        'bm': '03060',
+        'ticket': 'nothing',
+        'cpbs': 'bbPro',
+        'ztConfig': _initiateZtConfig,
+        'cysxFlag': 'false',
+        'dx_29_sjdxsl': loginInfo.userId.toString(),
+        'qycode': loginInfo.qycode,
+        'zzjgdmz': loginInfo.zzjgdmz,
+        'jgbm': loginInfo.jgbm,
+        'zxbm': orgNumber,
+        'khbh': loginInfo.grbh,
+        'userid': loginInfo.userId.toString(),
+        'zjhm': loginInfo.idCard,
+      },
+    );
+  }
+
+  String _buildApprovalPageUrl({
+    required UserLoginInfo loginInfo,
+    required Map<String, dynamic> todo,
+    required String cheque,
+  }) {
+    final String orgNumber =
+        loginInfo.zxbm.isNotEmpty ? loginInfo.zxbm : loginInfo.jgbh;
+    final Map<String, String> queryParameters = <String, String>{
+      'businessKey': _readNestedString(todo, 'bpmxq', 'businessKey'),
+      'bpmid': _readNestedString(todo, 'ggxx', 'bpmid'),
+      'newdaiban': 'db',
+      'ticket': 'nothing',
+      'qycode': loginInfo.qycode,
+      'ztConfig': _approvalZtConfig,
+      'flowable': 'db',
+      'flowtype': 'db',
+      'processDefinitionKey': _readNestedString(todo, 'bpmxq', 'processKey'),
+      'taskName': _readNestedString(todo, 'bpmxq', 'taskName'),
+      'taskid': _readNestedString(todo, 'bpmxq', 'taskId'),
+      'nodeType': 'check',
+      'cheque': cheque,
+      'zxbm': orgNumber,
+      'jgbm': loginInfo.jgbm,
+      'khbh': loginInfo.grbh,
+      'userid': loginInfo.userId.toString(),
+      'zjhm': loginInfo.idCard,
+      'zzjgdmz': loginInfo.zzjgdmz,
+      'openTab': '*',
+      'tyLoginToken': loginInfo.loginToken,
+      'cpbs': 'gjj',
+    };
+
+    final String processInstanceId = _readNestedString(
+      todo,
+      'bpmxq',
+      'processInstanceId',
+    );
+    final String taskDefinitionKey = _readNestedString(
+      todo,
+      'bpmxq',
+      'taskDefinitionKey',
+    );
+    final String processDefinitionId = _readNestedString(
+      todo,
+      'bpmxq',
+      'processDefinitionId',
+    );
+
+    if (processInstanceId.isNotEmpty) {
+      queryParameters['processInstanceId'] = processInstanceId;
+    }
+    if (taskDefinitionKey.isNotEmpty) {
+      queryParameters['taskDefinitionKey'] = taskDefinitionKey;
+    }
+    if (processDefinitionId.isNotEmpty) {
+      queryParameters['processDefinitionId'] = processDefinitionId;
+    }
+
+    return _buildHashRouteUrl(_approvalBaseUrl, queryParameters);
+  }
+
+  String _buildHashRouteUrl(
+    String baseUrl,
+    Map<String, String> queryParameters,
+  ) {
+    final String query = queryParameters.entries
+        .where((MapEntry<String, String> entry) => entry.value.isNotEmpty)
+        .map(
+          (MapEntry<String, String> entry) =>
+              '${Uri.encodeQueryComponent(entry.key)}='
+              '${Uri.encodeQueryComponent(entry.value)}',
+        )
+        .join('&');
+
+    return query.isEmpty ? baseUrl : '$baseUrl?$query';
   }
 
   Future<void> _initializeWebView(InAppWebViewController controller) async {
@@ -440,8 +679,8 @@ class _HybridCheckInPageState extends State<HybridCheckInPage> {
     _chequeService.dispose();
     _checkInHistoryService.dispose();
     _locationService.dispose();
+    _pendingTodoService.dispose();
     _userLoginInfoService.dispose();
-    _targetUrlController.dispose();
     _usernameController.dispose();
     _addressController.dispose();
     _longitudeController.dispose();
@@ -501,17 +740,11 @@ class _HybridCheckInPageState extends State<HybridCheckInPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  Text('目标页面', style: theme.textTheme.titleMedium),
+                  Text('页面入口', style: theme.textTheme.titleMedium),
                   const SizedBox(height: 12),
-                  TextField(
-                    controller: _targetUrlController,
-                    keyboardType: TextInputType.url,
-                    decoration: const InputDecoration(
-                      labelText: '业务页面 URL',
-                      hintText:
-                          'https://appsy.jbysoft.com/dxgl-app/dxslgl/#/dxslglComp/dxslglfq/index',
-                      border: OutlineInputBorder(),
-                    ),
+                  Text(
+                    '请选择要进入的业务入口。主动发起沿用原有发起逻辑；待办处理会先查询待办，再打开第一条审批页面。',
+                    style: theme.textTheme.bodyMedium,
                   ),
                   const SizedBox(height: 12),
                   Wrap(
@@ -519,19 +752,14 @@ class _HybridCheckInPageState extends State<HybridCheckInPage> {
                     runSpacing: 12,
                     children: <Widget>[
                       FilledButton.icon(
-                        onPressed: _openEmbeddedPage,
-                        icon: const Icon(Icons.open_in_browser),
-                        label: const Text('打开内嵌页'),
+                        onPressed: _openInitiatePage,
+                        icon: const Icon(Icons.playlist_add_circle_outlined),
+                        label: const Text('主动发起'),
                       ),
-                      OutlinedButton.icon(
-                        onPressed: () {
-                          _targetUrlController.clear();
-                          setState(() {
-                            _status = '已清空 URL 输入。';
-                          });
-                        },
-                        icon: const Icon(Icons.link_off),
-                        label: const Text('清空 URL'),
+                      FilledButton.icon(
+                        onPressed: _isLoadingPendingTodos ? null : _openPendingTodoPage,
+                        icon: const Icon(Icons.assignment_turned_in_outlined),
+                        label: Text(_isLoadingPendingTodos ? '查询中...' : '待办处理'),
                       ),
                     ],
                   ),
