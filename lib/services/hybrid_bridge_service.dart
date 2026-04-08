@@ -142,12 +142,16 @@ class HybridBridgeService {
         ? value
         : (() => {
             try {
-              return JSON.stringify(value);
+              const serialized = JSON.stringify(value);
+              return serialized === undefined ? String(value) : serialized;
             } catch (_) {
               return String(value);
             }
           })();
-    return raw.length > max ? raw.slice(0, max) + ' ...truncated' : raw;
+    const normalized = raw == null ? '' : String(raw);
+    return normalized.length > max
+      ? normalized.slice(0, max) + ' ...truncated'
+      : normalized;
   };
 
   const report = (message) => {

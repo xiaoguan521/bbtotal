@@ -11,6 +11,7 @@ class CheckInLocationPreset {
     this.city = '',
     this.district = '',
     this.street = '',
+    this.deviceIdentifier = '',
     this.cityCode = '',
     this.provinceCode = '',
     this.adCode = '',
@@ -28,6 +29,7 @@ class CheckInLocationPreset {
   final String city;
   final String district;
   final String street;
+  final String deviceIdentifier;
   final String cityCode;
   final String provinceCode;
   final String adCode;
@@ -47,6 +49,7 @@ class CheckInLocationPreset {
     String? city,
     String? district,
     String? street,
+    String? deviceIdentifier,
     String? cityCode,
     String? provinceCode,
     String? adCode,
@@ -64,6 +67,7 @@ class CheckInLocationPreset {
       city: city ?? this.city,
       district: district ?? this.district,
       street: street ?? this.street,
+      deviceIdentifier: deviceIdentifier ?? this.deviceIdentifier,
       cityCode: cityCode ?? this.cityCode,
       provinceCode: provinceCode ?? this.provinceCode,
       adCode: adCode ?? this.adCode,

@@ -188,6 +188,12 @@ class ChequeService {
     userinfo['bmbh'] = userinfo['bmbh'] ?? loginInfo.jgbm;
     userinfo['f_dept_id'] = userinfo['f_dept_id'] ?? loginInfo.jgbm;
     userinfo['deptid'] = userinfo['deptid'] ?? loginInfo.jgbm;
+    if (preset.deviceIdentifier.isNotEmpty) {
+      userinfo['dx_29_sbsbm'] =
+          userinfo['dx_29_sbsbm'] ?? preset.deviceIdentifier;
+      userinfo['sbsbm'] = userinfo['sbsbm'] ?? preset.deviceIdentifier;
+      userinfo['deviceId'] = userinfo['deviceId'] ?? preset.deviceIdentifier;
+    }
 
     userinfo['locationMsg'] = jsonEncode(preset.toBridgePayload());
     return userinfo;

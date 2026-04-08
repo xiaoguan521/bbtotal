@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -156,6 +158,194 @@ class _HybridWebViewPageState extends State<HybridWebViewPage> {
     await _webViewController?.reload();
   }
 
+  Future<JsPromptResponse?> _handleJsPrompt(
+    InAppWebViewController controller,
+    JsPromptRequest jsPromptRequest,
+  ) async {
+    final String message = jsPromptRequest.message ?? '';
+    _log('jsPrompt: $message');
+
+    final Map<String, dynamic>? payload = _decodePromptPayload(message);
+    if (payload == null) {
+      return null;
+    }
+
+    final String functionName = (payload['function'] ?? '').toString();
+    if (functionName.isEmpty) {
+      return null;
+    }
+
+    final String result = await _handlePromptFunction(controller, payload);
+    _log('jsPrompt handled: $functionName => $result');
+    return JsPromptResponse(
+      handledByClient: true,
+      action: JsPromptResponseAction.CONFIRM,
+      value: result,
+    );
+  }
+
+  Map<String, dynamic>? _decodePromptPayload(String message) {
+    try {
+      final Object? decoded = jsonDecode(message);
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+      if (decoded is Map) {
+        return decoded.map<String, dynamic>(
+          (dynamic key, dynamic value) => MapEntry(key.toString(), value),
+        );
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<String> _handlePromptFunction(
+    InAppWebViewController controller,
+    Map<String, dynamic> payload,
+  ) async {
+    final String functionName = (payload['function'] ?? '').toString();
+    switch (functionName) {
+      case 'getAppCache':
+        return await _getAppCache(controller, payload);
+      case 'setAppCache':
+        return await _setAppCache(controller, payload);
+      case 'removeAppCache':
+        return await _removeAppCache(controller, payload);
+      case 'clearAppCache':
+        return await _clearAppCache(controller);
+      default:
+        _log('jsPrompt unsupported function: $functionName');
+        return '';
+    }
+  }
+
+  Future<String> _getAppCache(
+    InAppWebViewController controller,
+    Map<String, dynamic> payload,
+  ) async {
+    final String key = (payload['key'] ?? '').toString();
+    if (key.isEmpty) {
+      return '';
+    }
+
+    final String script = '''
+(() => {
+  const key = ${jsonEncode(key)};
+  const fromLocal = window.localStorage ? window.localStorage.getItem(key) : null;
+  if (fromLocal != null) return fromLocal;
+  const fromSession = window.sessionStorage ? window.sessionStorage.getItem(key) : null;
+  if (fromSession != null) return fromSession;
+  return '';
+})()
+''';
+    final Object? result = await controller.evaluateJavascript(source: script);
+    final String value = _normalizeJsResult(result);
+    final String callbackScript = '''
+(() => {
+  const payload = ${jsonEncode(<String, dynamic>{
+      'code': 0,
+      'getAppCache': key,
+      key: value,
+    })};
+  if (typeof appCacheResult === 'function') {
+    appCacheResult(payload);
+    return;
+  }
+  if (typeof window.appCacheResult === 'function') {
+    window.appCacheResult(payload);
+  }
+})()
+''';
+    await controller.evaluateJavascript(source: callbackScript);
+    return '';
+  }
+
+  Future<String> _setAppCache(
+    InAppWebViewController controller,
+    Map<String, dynamic> payload,
+  ) async {
+    final String key = (payload['key'] ?? '').toString();
+    final String value = (payload['value'] ?? '').toString();
+    if (key.isEmpty) {
+      return '';
+    }
+
+    final String script = '''
+(() => {
+  const key = ${jsonEncode(key)};
+  const value = ${jsonEncode(value)};
+  try {
+    if (window.localStorage) window.localStorage.setItem(key, value);
+    if (window.sessionStorage) window.sessionStorage.setItem(key, value);
+    return 'success';
+  } catch (_) {
+    return '';
+  }
+})()
+''';
+    await controller.evaluateJavascript(source: script);
+    return '';
+  }
+
+  Future<String> _removeAppCache(
+    InAppWebViewController controller,
+    Map<String, dynamic> payload,
+  ) async {
+    final String key = (payload['key'] ?? '').toString();
+    if (key.isEmpty) {
+      return '';
+    }
+
+    final String script = '''
+(() => {
+  const key = ${jsonEncode(key)};
+  try {
+    if (window.localStorage) window.localStorage.removeItem(key);
+    if (window.sessionStorage) window.sessionStorage.removeItem(key);
+    return 'success';
+  } catch (_) {
+    return '';
+  }
+})()
+''';
+    await controller.evaluateJavascript(source: script);
+    return '';
+  }
+
+  Future<String> _clearAppCache(InAppWebViewController controller) async {
+    const String script = '''
+(() => {
+  try {
+    if (window.localStorage) window.localStorage.clear();
+    if (window.sessionStorage) window.sessionStorage.clear();
+    return 'success';
+  } catch (_) {
+    return '';
+  }
+})()
+''';
+    await controller.evaluateJavascript(source: script);
+    return '';
+  }
+
+  String _normalizeJsResult(Object? result) {
+    if (result == null) {
+      return '';
+    }
+    final String raw = result.toString();
+    if (raw == 'null' || raw == 'undefined') {
+      return '';
+    }
+    if (raw.length >= 2 && raw.startsWith('"') && raw.endsWith('"')) {
+      try {
+        return jsonDecode(raw) as String;
+      } catch (_) {
+        return raw.substring(1, raw.length - 1);
+      }
+    }
+    return raw;
+  }
+
   @override
   void dispose() {
     _diagnostics.dispose();
@@ -241,6 +431,7 @@ class _HybridWebViewPageState extends State<HybridWebViewPage> {
                     'console[${consoleMessage.messageLevel}]: ${consoleMessage.message}',
                   );
                 },
+                onJsPrompt: _handleJsPrompt,
                 onReceivedError: (controller, request, error) {
                   _log('error: ${request.url} -> ${error.description}');
                   _showMessage('页面错误：${error.description}');

@@ -212,6 +212,7 @@ class _HybridCheckInPageState extends State<HybridCheckInPage> {
       city: metadata.city,
       district: metadata.district,
       street: metadata.street,
+      deviceIdentifier: item.deviceIdentifier,
       cityCode: metadata.cityCode,
       provinceCode: metadata.provinceCode,
       adCode: metadata.adCode,

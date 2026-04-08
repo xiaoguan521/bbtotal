@@ -2,6 +2,7 @@ class CheckInHistoryLocation {
   const CheckInHistoryLocation({
     required this.address,
     required this.coordinateText,
+    required this.deviceIdentifier,
     required this.deviceName,
     required this.recordId,
     required this.recordNumber,
@@ -26,6 +27,7 @@ class CheckInHistoryLocation {
     return CheckInHistoryLocation(
       address: (json['dx_29_dkwz'] ?? '').toString(),
       coordinateText: coordinateText,
+      deviceIdentifier: (json['dx_29_sbsbm'] ?? '').toString(),
       deviceName: (json['dx_29_sjbz'] ?? '').toString(),
       recordId: (json['dx_29_id'] ?? '').toString(),
       recordNumber: (json['dx_29_dxbh'] ?? '').toString(),
@@ -39,6 +41,7 @@ class CheckInHistoryLocation {
 
   final String address;
   final String coordinateText;
+  final String deviceIdentifier;
   final String deviceName;
   final String recordId;
   final String recordNumber;

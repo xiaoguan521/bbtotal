@@ -26,7 +26,7 @@ class HybridRuntimeContext {
       resolvedUri: resolvedUri,
       loginInfo: loginInfo,
       preset: preset,
-      userInfoObject: _buildUserInfoObject(loginInfo),
+      userInfoObject: _buildUserInfoObject(loginInfo, preset),
     );
   }
 
@@ -138,12 +138,16 @@ class HybridRuntimeContext {
         'wifiInfo': wifiInfo,
       };
 
-  static Map<String, dynamic> _buildUserInfoObject(UserLoginInfo? loginInfo) {
+  static Map<String, dynamic> _buildUserInfoObject(
+    UserLoginInfo? loginInfo,
+    CheckInLocationPreset? preset,
+  ) {
     if (loginInfo == null) {
       return <String, dynamic>{};
     }
 
     final Map<String, dynamic> raw = _decodeJsonMap(loginInfo.rawUserInfoJson);
+    final String deviceIdentifier = preset?.deviceIdentifier ?? '';
     return <String, dynamic>{
       ...raw,
       'username': raw['username'] ?? raw['xingming'] ?? loginInfo.username,
@@ -160,6 +164,12 @@ class HybridRuntimeContext {
       'qycode': raw['qycode'] ?? loginInfo.qycode,
       'zzjgdmz': raw['zzjgdmz'] ?? loginInfo.zzjgdmz,
       'ticket': raw['ticket'] ?? loginInfo.ticket,
+      if (deviceIdentifier.isNotEmpty)
+        'dx_29_sbsbm': raw['dx_29_sbsbm'] ?? deviceIdentifier,
+      if (deviceIdentifier.isNotEmpty)
+        'sbsbm': raw['sbsbm'] ?? deviceIdentifier,
+      if (deviceIdentifier.isNotEmpty)
+        'deviceId': raw['deviceId'] ?? deviceIdentifier,
     };
   }
 
