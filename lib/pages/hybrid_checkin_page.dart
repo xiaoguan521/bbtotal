@@ -548,17 +548,13 @@ class _HybridCheckInPageState extends State<HybridCheckInPage> {
                                   child: CupertinoActivityIndicator(radius: 9),
                                 ),
                               )
-                            : const Icon(
-                                CupertinoIcons.person_crop_circle_fill,
-                                color: Color(0xFF8E8E93),
-                              ),
+                            : null,
                       ),
                     ),
                   ),
                   if (_loginInfo != null) ...<Widget>[
                     const SizedBox(height: 14),
                     _InfoPill(
-                      icon: CupertinoIcons.person_crop_circle_badge_checkmark,
                       title: _loginInfo!.username,
                       subtitle:
                           '${_loginInfo!.account}  ·  ${_loginInfo!.tokenPreview}',
@@ -621,8 +617,8 @@ class _HybridCheckInPageState extends State<HybridCheckInPage> {
                                   ),
                                   child: Icon(
                                     selected
-                                        ? CupertinoIcons.check_mark
-                                        : CupertinoIcons.location_solid,
+                                        ? Icons.check_rounded
+                                        : Icons.place_outlined,
                                     size: 16,
                                     color: selected
                                         ? Colors.white
@@ -689,14 +685,12 @@ class _HybridCheckInPageState extends State<HybridCheckInPage> {
             const SizedBox(height: 24),
             _ActionButton(
               label: _isLaunchingInitiate ? '处理中...' : '主动发起',
-              icon: CupertinoIcons.arrow_up_circle_fill,
               onPressed: _isBusy ? null : _openInitiatePage,
               filled: true,
             ),
             const SizedBox(height: 12),
             _ActionButton(
               label: _isLaunchingPending ? '处理中...' : '待办处理',
-              icon: CupertinoIcons.checkmark_seal_fill,
               onPressed: _isBusy ? null : _openPendingTodoPage,
               filled: false,
             ),
@@ -840,12 +834,10 @@ class _IosInputRow extends StatelessWidget {
 
 class _InfoPill extends StatelessWidget {
   const _InfoPill({
-    required this.icon,
     required this.title,
     required this.subtitle,
   });
 
-  final IconData icon;
   final String title;
   final String subtitle;
 
@@ -858,39 +850,23 @@ class _InfoPill extends StatelessWidget {
         color: const Color(0xFFEAF3FF),
         borderRadius: BorderRadius.circular(20),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Container(
-            width: 34,
-            height: 34,
-            decoration: const BoxDecoration(
-              color: Color(0xFF0A84FF),
-              shape: BoxShape.circle,
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF111111),
             ),
-            child: Icon(icon, color: Colors.white, size: 18),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF111111),
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFF6E6E73),
-                  ),
-                ),
-              ],
+          const SizedBox(height: 2),
+          Text(
+            subtitle,
+            style: const TextStyle(
+              fontSize: 12,
+              color: Color(0xFF6E6E73),
             ),
           ),
         ],
@@ -902,13 +878,11 @@ class _InfoPill extends StatelessWidget {
 class _ActionButton extends StatelessWidget {
   const _ActionButton({
     required this.label,
-    required this.icon,
     required this.onPressed,
     required this.filled,
   });
 
   final String label;
-  final IconData icon;
   final VoidCallback? onPressed;
   final bool filled;
 
@@ -948,8 +922,6 @@ class _ActionButton extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: <Widget>[
-              Icon(icon, color: foregroundColor, size: 20),
-              const SizedBox(width: 8),
               Text(
                 label,
                 style: TextStyle(

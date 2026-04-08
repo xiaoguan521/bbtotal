@@ -1,5 +1,4 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
@@ -79,8 +78,7 @@ class _HybridWebViewPageState extends State<HybridWebViewPage> {
                         ),
                       ),
                       const Spacer(),
-                      CupertinoButton(
-                        padding: EdgeInsets.zero,
+                      TextButton(
                         onPressed: _diagnostics.clear,
                         child: const Text('清空'),
                       ),
@@ -166,260 +164,117 @@ class _HybridWebViewPageState extends State<HybridWebViewPage> {
 
   @override
   Widget build(BuildContext context) {
-    final HybridRuntimeContext runtimeContext = widget.runtimeContext;
-
     return Scaffold(
       backgroundColor: const Color(0xFFF2F2F7),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
-          child: Column(
-            children: <Widget>[
-              _IosWebHeader(
-                title: widget.title,
-                onBack: () => Navigator.of(context).maybePop(),
-                onLogs: _showLogsSheet,
-                onRefresh: _reloadEmbeddedPage,
-              ),
-              const SizedBox(height: 14),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    const Text(
-                      '运行上下文',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF8E8E93),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Origin: ${runtimeContext.origin}\n'
-                      'Resolved URL: ${runtimeContext.resolvedUri}',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        height: 1.45,
-                        color: Color(0xFF6E6E73),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 14),
-              Expanded(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(28),
-                    boxShadow: const <BoxShadow>[
-                      BoxShadow(
-                        color: Color(0x12000000),
-                        blurRadius: 28,
-                        offset: Offset(0, 12),
-                      ),
-                    ],
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(28),
-                    child: Column(
-                      children: <Widget>[
-                        if (_isLoading)
-                          LinearProgressIndicator(
-                            minHeight: 3,
-                            value: _webProgress <= 0 || _webProgress >= 1
-                                ? null
-                                : _webProgress,
-                            backgroundColor: const Color(0xFFE5E5EA),
-                            valueColor: const AlwaysStoppedAnimation<Color>(
-                              Color(0xFF0A84FF),
-                            ),
-                          ),
-                        Expanded(
-                          child: InAppWebView(
-                            initialSettings: InAppWebViewSettings(
-                              isInspectable: kDebugMode,
-                              mediaPlaybackRequiresUserGesture: false,
-                              allowsInlineMediaPlayback: true,
-                              useShouldOverrideUrlLoading: true,
-                            ),
-                            initialUserScripts:
-                                _hybridBridgeService.buildInitialUserScripts(
-                              runtimeContext,
-                            ),
-                            onWebViewCreated: _initializeWebView,
-                            onLoadStart: (controller, url) {
-                              _log('loadStart: ${url ?? runtimeContext.resolvedUri}');
-                              if (!mounted) {
-                                return;
-                              }
-                              setState(() {
-                                _isLoading = true;
-                              });
-                            },
-                            onLoadStop: (controller, url) {
-                              _log('loadStop: ${url ?? runtimeContext.resolvedUri}');
-                              if (!mounted) {
-                                return;
-                              }
-                              setState(() {
-                                _isLoading = false;
-                                _webProgress = 1;
-                              });
-                            },
-                            onProgressChanged: (controller, progress) {
-                              if (!mounted) {
-                                return;
-                              }
-                              setState(() {
-                                _webProgress = progress / 100;
-                                _isLoading = progress < 100;
-                              });
-                            },
-                            onConsoleMessage: (controller, consoleMessage) {
-                              _log(
-                                'console[${consoleMessage.messageLevel}]: ${consoleMessage.message}',
-                              );
-                            },
-                            onReceivedError: (controller, request, error) {
-                              _log('error: ${request.url} -> ${error.description}');
-                              _showMessage('页面错误：${error.description}');
-                              if (!mounted) {
-                                return;
-                              }
-                              setState(() {
-                                _isLoading = false;
-                              });
-                            },
-                            shouldOverrideUrlLoading: (
-                              controller,
-                              navigationAction,
-                            ) async {
-                              final WebUri? uri = navigationAction.request.url;
-                              if (uri == null) {
-                                return NavigationActionPolicy.ALLOW;
-                              }
-
-                              if (<String>{
-                                'http',
-                                'https',
-                                'file',
-                                'about',
-                                'data',
-                                'javascript',
-                              }.contains(uri.scheme)) {
-                                return NavigationActionPolicy.ALLOW;
-                              }
-
-                              _log('Blocked non-http(s) navigation: $uri');
-                              return NavigationActionPolicy.CANCEL;
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
+      appBar: AppBar(
+        title: Text(widget.title),
+        actions: <Widget>[
+          IconButton(
+            tooltip: '诊断日志',
+            onPressed: _showLogsSheet,
+            icon: const Icon(Icons.subject_rounded),
           ),
-        ),
+          IconButton(
+            tooltip: '刷新',
+            onPressed: _reloadEmbeddedPage,
+            icon: const Icon(Icons.refresh_rounded),
+          ),
+        ],
       ),
-    );
-  }
-}
-
-class _IosWebHeader extends StatelessWidget {
-  const _IosWebHeader({
-    required this.title,
-    required this.onBack,
-    required this.onLogs,
-    required this.onRefresh,
-  });
-
-  final String title;
-  final VoidCallback onBack;
-  final VoidCallback onLogs;
-  final VoidCallback onRefresh;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: <Widget>[
-        _CircleActionButton(
-          icon: CupertinoIcons.back,
-          onPressed: onBack,
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              const Text(
-                'Hybrid Container',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF8E8E93),
-                  letterSpacing: 0.3,
+      body: SafeArea(
+        top: false,
+        child: Column(
+          children: <Widget>[
+            if (_isLoading)
+              LinearProgressIndicator(
+                minHeight: 2,
+                value:
+                    _webProgress <= 0 || _webProgress >= 1 ? null : _webProgress,
+                backgroundColor: const Color(0xFFE5E5EA),
+                valueColor: const AlwaysStoppedAnimation<Color>(
+                  Color(0xFF0A84FF),
                 ),
               ),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.4,
-                  color: Color(0xFF111111),
+            Expanded(
+              child: InAppWebView(
+                initialSettings: InAppWebViewSettings(
+                  isInspectable: kDebugMode,
+                  mediaPlaybackRequiresUserGesture: false,
+                  allowsInlineMediaPlayback: true,
+                  useShouldOverrideUrlLoading: true,
                 ),
+                initialUserScripts:
+                    _hybridBridgeService.buildInitialUserScripts(
+                  widget.runtimeContext,
+                ),
+                onWebViewCreated: _initializeWebView,
+                onLoadStart: (controller, url) {
+                  _log('loadStart: ${url ?? widget.runtimeContext.resolvedUri}');
+                  if (!mounted) {
+                    return;
+                  }
+                  setState(() {
+                    _isLoading = true;
+                  });
+                },
+                onLoadStop: (controller, url) {
+                  _log('loadStop: ${url ?? widget.runtimeContext.resolvedUri}');
+                  if (!mounted) {
+                    return;
+                  }
+                  setState(() {
+                    _isLoading = false;
+                    _webProgress = 1;
+                  });
+                },
+                onProgressChanged: (controller, progress) {
+                  if (!mounted) {
+                    return;
+                  }
+                  setState(() {
+                    _webProgress = progress / 100;
+                    _isLoading = progress < 100;
+                  });
+                },
+                onConsoleMessage: (controller, consoleMessage) {
+                  _log(
+                    'console[${consoleMessage.messageLevel}]: ${consoleMessage.message}',
+                  );
+                },
+                onReceivedError: (controller, request, error) {
+                  _log('error: ${request.url} -> ${error.description}');
+                  _showMessage('页面错误：${error.description}');
+                  if (!mounted) {
+                    return;
+                  }
+                  setState(() {
+                    _isLoading = false;
+                  });
+                },
+                shouldOverrideUrlLoading: (controller, navigationAction) async {
+                  final WebUri? uri = navigationAction.request.url;
+                  if (uri == null) {
+                    return NavigationActionPolicy.ALLOW;
+                  }
+
+                  if (<String>{
+                    'http',
+                    'https',
+                    'file',
+                    'about',
+                    'data',
+                    'javascript',
+                  }.contains(uri.scheme)) {
+                    return NavigationActionPolicy.ALLOW;
+                  }
+
+                  _log('Blocked non-http(s) navigation: $uri');
+                  return NavigationActionPolicy.CANCEL;
+                },
               ),
-            ],
-          ),
+            ),
+          ],
         ),
-        _CircleActionButton(
-          icon: CupertinoIcons.doc_text,
-          onPressed: onLogs,
-        ),
-        const SizedBox(width: 8),
-        _CircleActionButton(
-          icon: CupertinoIcons.refresh,
-          onPressed: onRefresh,
-        ),
-      ],
-    );
-  }
-}
-
-class _CircleActionButton extends StatelessWidget {
-  const _CircleActionButton({
-    required this.icon,
-    required this.onPressed,
-  });
-
-  final IconData icon;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return CupertinoButton(
-      padding: EdgeInsets.zero,
-      onPressed: onPressed,
-      child: Container(
-        width: 42,
-        height: 42,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFE5E5EA)),
-        ),
-        child: Icon(icon, size: 20, color: const Color(0xFF111111)),
       ),
     );
   }
