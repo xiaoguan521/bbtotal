@@ -180,25 +180,83 @@ class HybridBridgeService {
     });
   };
 
+  const mergeDefined = (...sources) => {
+    const target = {};
+    sources.forEach((source) => {
+      if (!source || typeof source !== 'object') {
+        return;
+      }
+      Object.entries(source).forEach(([key, value]) => {
+        if (value !== undefined) {
+          target[key] = value;
+        }
+      });
+    });
+    return target;
+  };
+
+  const normalizeDeviceFields = (payload) => {
+    const next =
+      payload && typeof payload === 'object' && !Array.isArray(payload)
+        ? mergeDefined(payload)
+        : {};
+    const deviceCandidate = [
+      next.sbsbm,
+      next.dx_29_sbsbm,
+      next.deviceuuid,
+      next.deviceId,
+      runtime.pageParams && runtime.pageParams.sbsbm,
+      runtime.pageParams && runtime.pageParams.dx_29_sbsbm,
+      runtime.pageParams && runtime.pageParams.deviceuuid,
+      runtime.pageParams && runtime.pageParams.deviceId,
+      runtime.bbgrxx && runtime.bbgrxx.sbsbm,
+      runtime.bbgrxx && runtime.bbgrxx.dx_29_sbsbm,
+      runtime.bbgrxx && runtime.bbgrxx.deviceuuid,
+      runtime.bbgrxx && runtime.bbgrxx.deviceId,
+    ].find((value) => typeof value === 'string' && value.trim());
+
+    if (deviceCandidate) {
+      if (!next.sbsbm) {
+        next.sbsbm = deviceCandidate;
+      }
+      if (!next.dx_29_sbsbm) {
+        next.dx_29_sbsbm = deviceCandidate;
+      }
+      if (!next.deviceuuid) {
+        next.deviceuuid = deviceCandidate;
+      }
+      if (!next.deviceId) {
+        next.deviceId = deviceCandidate;
+      }
+    }
+
+    return next;
+  };
+
+  const syncBbgrxx = (payload) => {
+    const normalized = normalizeDeviceFields(
+      mergeDefined(runtime.bbgrxx || {}, window.bbgrxx || {}, payload || {}),
+    );
+    window.bbgrxx = normalized;
+    const serialized = stringify(normalized);
+    try {
+      if (window.localStorage) {
+        window.localStorage.setItem('bbgrxx', serialized);
+      }
+      if (window.sessionStorage) {
+        window.sessionStorage.setItem('bbgrxx', serialized);
+      }
+    } catch (_) {}
+    return normalized;
+  };
+
   applyStorage(window.localStorage, runtime.storageSeed);
   applyStorage(window.sessionStorage, runtime.storageSeed);
 
-  const seedBbgrxx = runtime.bbgrxx || {};
-  const seedBbgrxxJson = runtime.bbgrxxJson || '{}';
   try {
-    const currentBbgrxx =
-      window.bbgrxx && typeof window.bbgrxx === 'object' ? window.bbgrxx : {};
-    window.bbgrxx = Object.assign({}, seedBbgrxx, currentBbgrxx);
+    syncBbgrxx(runtime.bbgrxx || {});
   } catch (_) {
-    window.bbgrxx = seedBbgrxx;
-  }
-  try {
-    if (window.localStorage) {
-      window.localStorage.setItem('bbgrxx', seedBbgrxxJson);
-    }
-    if (window.sessionStorage) {
-      window.sessionStorage.setItem('bbgrxx', seedBbgrxxJson);
-    }
+    window.bbgrxx = normalizeDeviceFields(runtime.bbgrxx || {});
   } catch (_) {}
 
   window.__bbtotalPageParams = runtime.pageParams || {};
@@ -907,8 +965,70 @@ class HybridBridgeService {
   window.__bbtotalApplySession = () => {
     applyStorage(window.localStorage, runtime.storageSeed);
     applyStorage(window.sessionStorage, runtime.storageSeed);
+    syncBbgrxx(runtime.bbgrxx || {});
     return runtime;
   };
+
+  window.__bbtotalSyncBbgrxx = syncBbgrxx;
+
+  const installMobileUtilsPatch = () => {
+    const utils = window.ptPublicMethodMobileUtils;
+    if (!utils || typeof utils !== 'object') {
+      return false;
+    }
+    if (utils.__bbtotalGetUserMsgMobilePatched) {
+      return true;
+    }
+    if (typeof utils.getUserMsgMobile !== 'function') {
+      return false;
+    }
+
+    const original = utils.getUserMsgMobile.bind(utils);
+    utils.getUserMsgMobile = async function (...args) {
+      const result = await original(...args);
+      try {
+        let parsedUserinfo = {};
+        const originalUserinfo =
+          result && typeof result === 'object' ? result.userinfo : undefined;
+        if (typeof originalUserinfo === 'string' && originalUserinfo.trim()) {
+          try {
+            const decoded = JSON.parse(originalUserinfo);
+            if (decoded && typeof decoded === 'object' && !Array.isArray(decoded)) {
+              parsedUserinfo = decoded;
+            }
+          } catch (_) {}
+        } else if (
+          originalUserinfo &&
+          typeof originalUserinfo === 'object' &&
+          !Array.isArray(originalUserinfo)
+        ) {
+          parsedUserinfo = originalUserinfo;
+        }
+
+        const mergedUserinfo = syncBbgrxx(parsedUserinfo);
+        if (result && typeof result === 'object' && !Array.isArray(result)) {
+          if (result.userinfoRaw === undefined) {
+            result.userinfoRaw = originalUserinfo;
+          }
+          result.userinfo = mergedUserinfo;
+        }
+      } catch (error) {
+        report('[bridge] getUserMsgMobile normalize error ' + preview(error));
+      }
+      return result;
+    };
+    utils.__bbtotalGetUserMsgMobilePatched = true;
+    report('[bridge] patched ptPublicMethodMobileUtils.getUserMsgMobile');
+    return true;
+  };
+
+  let mobileUtilsPatchAttempts = 0;
+  const mobileUtilsPatchTimer = window.setInterval(() => {
+    mobileUtilsPatchAttempts += 1;
+    if (installMobileUtilsPatch() || mobileUtilsPatchAttempts >= 40) {
+      window.clearInterval(mobileUtilsPatchTimer);
+    }
+  }, 250);
 
   window.BBTotalHybrid = bridge;
   window.SYAppModel = Object.assign({}, window.SYAppModel || {}, bridge);
