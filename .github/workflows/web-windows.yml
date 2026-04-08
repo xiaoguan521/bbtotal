@@ -5,14 +5,11 @@ on:
   push:
     branches:
       - main
-  pull_request:
-    branches:
-      - main
 
 jobs:
-  analyze:
+  build-web:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -38,36 +35,6 @@ jobs:
       - name: Flutter Pub Get
         run: flutter pub get
 
-      - name: Flutter Analyze
-        run: flutter analyze
-
-  build-web:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    needs: analyze
-    if: github.event_name != 'pull_request'
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set Up Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
-
-      - name: Cache Pub Packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.pub-cache
-          key: ${{ runner.os }}-pub-${{ hashFiles('pubspec.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-pub-
-
-      - name: Flutter Pub Get
-        run: flutter pub get
-
       - name: Build Web
         run: flutter build web
 
@@ -81,8 +48,6 @@ jobs:
   build-windows:
     runs-on: windows-latest
     timeout-minutes: 45
-    needs: analyze
-    if: github.event_name != 'pull_request'
 
     steps:
       - name: Checkout

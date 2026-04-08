@@ -1,11 +1,11 @@
 {
-    "name": "bbtotal",
-    "short_name": "bbtotal",
+    "name": "打卡入口",
+    "short_name": "打卡入口",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#0F62E2",
+    "theme_color": "#0F62E2",
+    "description": "用于主动发起与待办处理的混合容器入口。",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

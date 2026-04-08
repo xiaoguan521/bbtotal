@@ -20,7 +20,8 @@ class BbtotalApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'BBTotal',
+      title: '打卡入口',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: const ColorScheme.light(
           primary: Color(0xFF0A84FF),

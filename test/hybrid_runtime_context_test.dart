@@ -1,0 +1,50 @@
+import 'package:bbtotal/models/check_in_location_preset.dart';
+import 'package:bbtotal/models/hybrid_runtime_context.dart';
+import 'package:bbtotal/models/user_login_info.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  const UserLoginInfo loginInfo = UserLoginInfo(
+    account: 'liu',
+    username: '刘晓晨',
+    userId: 3517,
+    grbh: '01000000009000026129',
+    idCard: '130528198704157217',
+    loginToken: 'token:app_02',
+    blqd: 'app_02',
+    jgbh: '1301100001',
+    jgbm: '130110000102a705',
+    zxbm: '1301100001',
+    qycode: 'shineyue',
+    zzjgdmz: 'shineyue',
+    ticket: 'ticket-1',
+  );
+
+  final CheckInLocationPreset preset = CheckInLocationPreset(
+    address: '河北省石家庄市鹿泉区御园路71号靠近光谷科技园',
+    latitude: 38.0,
+    longitude: 114.0,
+    loginInfo: loginInfo,
+    deviceIdentifier: 'device-123',
+    cheque: 'cheque-123',
+    ticket: 'ticket-123',
+  );
+
+  test('launch payload is propagated into storage seed and runtime map', () {
+    final HybridRuntimeContext context = HybridRuntimeContext.fromInputs(
+      baseUrl: 'https://appsy.jbysoft.com/example/#/page/index',
+      loginInfo: loginInfo,
+      preset: preset,
+      launchPayload: const <String, dynamic>{
+        'push': '1',
+        'pushURL': 'https://appsy.jbysoft.com/next',
+        'hidden': '1',
+      },
+    );
+
+    expect(context.storageSeed['params2'], isNotEmpty);
+    expect(context.launchPayload['push'], '1');
+    expect(context.toScriptRuntime()['launchPayload'], isA<Map<String, dynamic>>());
+    expect(context.toScriptRuntime()['launchPayloadJson'], contains('"push":"1"'));
+  });
+}

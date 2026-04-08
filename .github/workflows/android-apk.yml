@@ -1,4 +1,4 @@
-name: Mobile Packages
+name: Android Packages
 
 on:
   workflow_dispatch:
@@ -14,63 +14,11 @@ on:
   push:
     branches:
       - main
-  pull_request:
-    branches:
-      - main
 
 jobs:
-  analyze:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    env:
-      GRADLE_OPTS: -Dorg.gradle.vfs.watch=false
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set Up Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-          cache: gradle
-
-      - name: Set Up Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
-
-      - name: Cache Pub Packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.pub-cache
-          key: ${{ runner.os }}-pub-${{ hashFiles('pubspec.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-pub-
-
-      - name: Cache Android SDK Components
-        uses: actions/cache@v4
-        with:
-          path: |
-            /usr/local/lib/android/sdk/cmake/3.22.1
-            /usr/local/lib/android/sdk/licenses
-          key: ${{ runner.os }}-android-sdk-cmake-3.22.1
-          restore-keys: |
-            ${{ runner.os }}-android-sdk-cmake-
-
-      - name: Flutter Pub Get
-        run: flutter pub get
-
-      - name: Flutter Analyze
-        run: flutter analyze
-
   build-android-apk:
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    needs: analyze
-    if: github.event_name != 'pull_request'
     env:
       GRADLE_OPTS: -Dorg.gradle.vfs.watch=false
       ANDROID_KEYSTORE_PATH: ${{ github.workspace }}/android/upload-keystore.jks

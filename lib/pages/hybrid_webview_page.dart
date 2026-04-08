@@ -33,6 +33,8 @@ class _HybridWebViewPageState extends State<HybridWebViewPage> {
   bool _isLoading = true;
   double _webProgress = 0;
 
+  bool get _showDiagnosticsControls => kDebugMode;
+
   void _log(String message) {
     _diagnostics.add(message);
   }
@@ -48,6 +50,9 @@ class _HybridWebViewPageState extends State<HybridWebViewPage> {
   }
 
   void _showLogsSheet() {
+    if (!_showDiagnosticsControls) {
+      return;
+    }
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: const Color(0xFFF2F2F7),
@@ -539,11 +544,12 @@ class _HybridWebViewPageState extends State<HybridWebViewPage> {
       appBar: AppBar(
         title: Text(widget.title),
         actions: <Widget>[
-          IconButton(
-            tooltip: '诊断日志',
-            onPressed: _showLogsSheet,
-            icon: const Icon(Icons.subject_rounded),
-          ),
+          if (_showDiagnosticsControls)
+            IconButton(
+              tooltip: '诊断日志',
+              onPressed: _showLogsSheet,
+              icon: const Icon(Icons.subject_rounded),
+            ),
           IconButton(
             tooltip: '刷新',
             onPressed: _reloadEmbeddedPage,
@@ -627,7 +633,9 @@ class _HybridWebViewPageState extends State<HybridWebViewPage> {
                 onJsPrompt: _handleJsPrompt,
                 onReceivedError: (controller, request, error) {
                   _log('error: ${request.url} -> ${error.description}');
-                  _showMessage('页面错误：${error.description}');
+                  if (request.isForMainFrame ?? true) {
+                    _showMessage('页面错误：${error.description}');
+                  }
                   if (!mounted) {
                     return;
                   }
