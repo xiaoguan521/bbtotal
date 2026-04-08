@@ -257,7 +257,7 @@ class HybridBridgeService {
     syncBbgrxx(runtime.bbgrxx || {});
   } catch (_) {
     window.bbgrxx = normalizeDeviceFields(runtime.bbgrxx || {});
-  } catch (_) {}
+  }
 
   window.__bbtotalPageParams = runtime.pageParams || {};
   window.__bbtotalPageParamsJson = runtime.pageParamsJson || '{}';
