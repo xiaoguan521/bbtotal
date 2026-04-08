@@ -23,6 +23,7 @@ class PendingTodoService {
     UserLoginInfo loginInfo, {
     int page = 1,
     int size = 40,
+    int ywzt = 0,
   }) async {
     final String orgNumber =
         loginInfo.zxbm.isNotEmpty ? loginInfo.zxbm : loginInfo.jgbh;
@@ -56,6 +57,7 @@ class PendingTodoService {
               organizationNumber: orgNumber,
               page: page,
               size: size,
+              ywzt: ywzt,
             ),
           ),
         )
@@ -86,6 +88,7 @@ class PendingTodoService {
     required String organizationNumber,
     required int page,
     required int size,
+    required int ywzt,
   }) {
     final DateTime now = DateTime.now();
     final DateTime start = DateTime(now.year, now.month - 6, now.day);
@@ -114,7 +117,7 @@ class PendingTodoService {
       'available': '1',
       'ptSettings': <String, dynamic>{},
       'queryCriteria': <dynamic>[],
-      'ywzt': 0,
+      'ywzt': ywzt,
     };
   }
 

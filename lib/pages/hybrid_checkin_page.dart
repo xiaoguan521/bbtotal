@@ -267,21 +267,21 @@ class _HybridCheckInPageState extends State<HybridCheckInPage> {
         return;
       }
 
-      final Map<String, dynamic> payload =
-          await _pendingTodoService.fetchPendingTodos(loginInfo);
-      final List<Map<String, dynamic>> items = _extractTodoItems(payload);
+      final Map<String, dynamic>? matchedTodo = await _findCheckInPendingTodo(
+        loginInfo,
+      );
       if (!mounted) {
         return;
       }
 
-      if (items.isEmpty) {
-        _showMessage('没有查询到可处理的待办。');
+      if (matchedTodo == null) {
+        _showMessage('没有查询到打卡待办。');
         return;
       }
 
       final String url = _buildApprovalPageUrl(
         loginInfo: loginInfo,
-        todo: items.first,
+        todo: matchedTodo,
         cheque: preset.cheque,
       );
       _navigateToWebView(
@@ -304,6 +304,23 @@ class _HybridCheckInPageState extends State<HybridCheckInPage> {
     }
   }
 
+  Future<Map<String, dynamic>?> _findCheckInPendingTodo(
+    UserLoginInfo loginInfo,
+  ) async {
+    final List<int> queryOrder = <int>[0, 1];
+    for (final int ywzt in queryOrder) {
+      final Map<String, dynamic> payload = await _pendingTodoService
+          .fetchPendingTodos(loginInfo, ywzt: ywzt);
+      final List<Map<String, dynamic>> items = _extractTodoItems(payload);
+      final Map<String, dynamic>? matched = _pickCheckInTodo(items);
+      if (matched != null) {
+        return matched;
+      }
+    }
+
+    return null;
+  }
+
   List<Map<String, dynamic>> _extractTodoItems(Map<String, dynamic> payload) {
     final Object? results = payload['results'];
     if (results is! List) {
@@ -318,6 +335,16 @@ class _HybridCheckInPageState extends State<HybridCheckInPage> {
           ),
         )
         .toList();
+  }
+
+  Map<String, dynamic>? _pickCheckInTodo(List<Map<String, dynamic>> items) {
+    for (final Map<String, dynamic> item in items) {
+      final String taskName = _readNestedString(item, 'ggxx', 'zdyRwmc');
+      if (taskName.contains('打卡')) {
+        return item;
+      }
+    }
+    return null;
   }
 
   void _navigateToWebView({
