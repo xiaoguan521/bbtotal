@@ -184,6 +184,43 @@ class _HybridWebViewPageState extends State<HybridWebViewPage> {
     await _webViewController?.reload();
   }
 
+  Future<void> _deliverInitialPageData(InAppWebViewController controller) async {
+    final String paramsJson = widget.runtimeContext.pageParamsJson;
+    final String params2Json = widget.runtimeContext.pageParams2Json;
+    Future<String> runOnce() async {
+      final String script = '''
+(() => {
+  const params = ${jsonEncode(paramsJson)};
+  const params2 = ${jsonEncode(params2Json)};
+  if (typeof window.addDataSouce === 'function') {
+    window.addDataSouce(params, params2);
+    return 'called';
+  }
+  if (typeof addDataSouce === 'function') {
+    addDataSouce(params, params2);
+    return 'called';
+  }
+  return 'missing';
+})()
+''';
+      final Object? result = await controller.evaluateJavascript(source: script);
+      return (result ?? 'null').toString();
+    }
+
+    try {
+      for (int attempt = 1; attempt <= 3; attempt++) {
+        final String result = await runOnce();
+        _log('deliverInitialPageData[$attempt]: $result');
+        if (result != 'missing') {
+          break;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 120));
+      }
+    } catch (error) {
+      _log('deliverInitialPageData failed: $error');
+    }
+  }
+
   Future<void> _handleOpenUrlRequest(
     String rawPayload, {
     required String source,
@@ -597,6 +634,12 @@ class _HybridWebViewPageState extends State<HybridWebViewPage> {
                 },
                 onLoadStop: (controller, url) {
                   _log('loadStop: ${url ?? widget.runtimeContext.resolvedUri}');
+                  unawaited(
+                    Future<void>.delayed(
+                      const Duration(milliseconds: 80),
+                      () => _deliverInitialPageData(controller),
+                    ),
+                  );
                   if (!mounted) {
                     return;
                   }

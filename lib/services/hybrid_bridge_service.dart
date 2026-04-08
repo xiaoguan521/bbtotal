@@ -183,8 +183,31 @@ class HybridBridgeService {
   applyStorage(window.localStorage, runtime.storageSeed);
   applyStorage(window.sessionStorage, runtime.storageSeed);
 
+  const seedBbgrxx = runtime.bbgrxx || {};
+  const seedBbgrxxJson = runtime.bbgrxxJson || '{}';
+  try {
+    const currentBbgrxx =
+      window.bbgrxx && typeof window.bbgrxx === 'object' ? window.bbgrxx : {};
+    window.bbgrxx = Object.assign({}, seedBbgrxx, currentBbgrxx);
+  } catch (_) {
+    window.bbgrxx = seedBbgrxx;
+  }
+  try {
+    if (window.localStorage) {
+      window.localStorage.setItem('bbgrxx', seedBbgrxxJson);
+    }
+    if (window.sessionStorage) {
+      window.sessionStorage.setItem('bbgrxx', seedBbgrxxJson);
+    }
+  } catch (_) {}
+
+  window.__bbtotalPageParams = runtime.pageParams || {};
+  window.__bbtotalPageParamsJson = runtime.pageParamsJson || '{}';
   window.__bbtotalLaunchPayload = runtime.launchPayload || {};
   window.__bbtotalLaunchPayloadJson = runtime.launchPayloadJson || '';
+  if (!window.params && runtime.pageParamsJson) {
+    window.params = runtime.pageParamsJson;
+  }
   if (!window.params2 && runtime.launchPayloadJson) {
     window.params2 = runtime.launchPayloadJson;
   }
@@ -200,7 +223,7 @@ class HybridBridgeService {
   })();
   const cpbs =
     (resolvedUrl && resolvedUrl.searchParams && resolvedUrl.searchParams.get('cpbs')) ||
-    runtime.bridgeContext.blqd ||
+    runtime.bridgeContext.cpbs ||
     'gjj';
   const clientId = 'bbPro';
   const appSecret = 'SY6EE1BFA49CE3482EA003DD5C87CBFF';

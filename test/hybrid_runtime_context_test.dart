@@ -43,8 +43,19 @@ void main() {
     );
 
     expect(context.storageSeed['params2'], isNotEmpty);
+    expect(context.storageSeed['params'], isNotEmpty);
     expect(context.launchPayload['push'], '1');
+    expect(context.pageParams['deviceuuid'], 'device-123');
+    expect(context.pageParams['dx_29_sbsbm'], 'device-123');
+    expect(context.bbgrxx['deviceuuid'], 'device-123');
+    expect(context.bbgrxx['dx_29_sbsbm'], 'device-123');
+    expect(context.bbgrxx['blqd'], 'app_02');
+    expect(context.userInfoObject['deviceuuid'], 'device-123');
+    expect(context.userInfoObject['locationMsg'], contains('"errorCode":0'));
+    expect(context.userInfoObject['client'], '4');
     expect(context.toScriptRuntime()['launchPayload'], isA<Map<String, dynamic>>());
     expect(context.toScriptRuntime()['launchPayloadJson'], contains('"push":"1"'));
+    expect(context.toScriptRuntime()['pageParamsJson'], contains('"deviceuuid":"device-123"'));
+    expect(context.toScriptRuntime()['bbgrxxJson'], contains('"deviceuuid":"device-123"'));
   });
 }

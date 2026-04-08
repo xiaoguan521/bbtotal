@@ -49,6 +49,9 @@ class HybridRuntimeContext {
 
   String get userInfoJson => jsonEncode(userInfoObject);
   String get launchPayloadJson => jsonEncode(launchPayload);
+  String get pageParamsJson => jsonEncode(pageParams);
+  String get pageParams2Json => launchPayload.isEmpty ? '{}' : launchPayloadJson;
+  String get bbgrxxJson => jsonEncode(bbgrxx);
 
   Map<String, dynamic> get locationPayload {
     if (preset != null) {
@@ -85,10 +88,53 @@ class HybridRuntimeContext {
         'zzjgdmz': loginInfo?.zzjgdmz ?? '',
         'ticket': preset?.ticket ?? loginInfo?.ticket ?? '',
         'cheque': preset?.cheque ?? '',
+        'cpbs': 'gjj',
+        'deviceuuid': preset?.deviceIdentifier ?? '',
         'dx_29_sbsbm': preset?.deviceIdentifier ?? '',
         'sbsbm': preset?.deviceIdentifier ?? '',
         'deviceId': preset?.deviceIdentifier ?? '',
       };
+
+  Map<String, dynamic> get pageParams {
+    final Map<String, dynamic> params = <String, dynamic>{
+      ...userInfoObject,
+      'blqd': loginInfo?.blqd ?? '',
+      'channel': loginInfo?.blqd ?? '',
+      'zzbs': loginInfo?.zxbm.isNotEmpty == true
+          ? loginInfo!.zxbm
+          : loginInfo?.jgbh ?? '',
+      'loginToken': loginInfo?.loginToken ?? '',
+      'client': loginInfo?.client.isNotEmpty == true ? loginInfo!.client : '4',
+      'qycode': loginInfo?.qycode ?? '',
+      'zzbm': 'bbPro',
+      'deviceuuid': preset?.deviceIdentifier ?? '',
+      'dx_29_sbsbm': preset?.deviceIdentifier ?? '',
+      'sbsbm': preset?.deviceIdentifier ?? '',
+      'deviceId': preset?.deviceIdentifier ?? '',
+      'isWifi': false,
+      'wifiName': '',
+      'wifiMac': '',
+      'headphoto': '',
+      'settings': <String, dynamic>{},
+      'locationMsg': locationPayload,
+    };
+
+    if (params['zzjgxx'] == null && loginInfo?.rawZzjgxxJson.isNotEmpty == true) {
+      params['zzjgxx'] = _decodeJsonMap(loginInfo!.rawZzjgxxJson);
+    }
+
+    return params;
+  }
+
+  Map<String, dynamic> get bbgrxx {
+    return <String, dynamic>{
+      ...pageParams,
+      ...bridgeContext,
+      'locationMsg': locationPayload,
+      'updatingLocationMsg': locationPayload,
+      'wifiInfo': wifiInfo,
+    };
+  }
 
   Map<String, String> get authHeaders {
     if (loginInfo == null) {
@@ -129,6 +175,7 @@ class HybridRuntimeContext {
         if ((preset?.deviceIdentifier ?? '').isNotEmpty)
           'deviceId': preset!.deviceIdentifier,
         if (userInfoObject.isNotEmpty) 'userinfo': userInfoJson,
+        if (pageParams.isNotEmpty) 'params': pageParamsJson,
         if (launchPayload.isNotEmpty) 'params2': launchPayloadJson,
       };
 
@@ -151,8 +198,13 @@ class HybridRuntimeContext {
         'storageSeed': storageSeed,
         'userInfo': userInfoObject,
         'userInfoJson': userInfoJson,
+        'bbgrxx': bbgrxx,
+        'bbgrxxJson': bbgrxxJson,
+        'pageParams': pageParams,
+        'pageParamsJson': pageParamsJson,
         'launchPayload': launchPayload,
         'launchPayloadJson': launchPayloadJson,
+        'pageParams2Json': pageParams2Json,
         'locationPayload': locationPayload,
         'wifiInfo': wifiInfo,
       };
@@ -167,6 +219,13 @@ class HybridRuntimeContext {
 
     final Map<String, dynamic> raw = _decodeJsonMap(loginInfo.rawUserInfoJson);
     final String deviceIdentifier = preset?.deviceIdentifier ?? '';
+    final Map<String, dynamic> locationPayload =
+        preset?.toBridgePayload() ??
+        const <String, dynamic>{
+          'data': <String, dynamic>{},
+          'errorCode': 1,
+          'msg': '定位尚未准备',
+        };
     return <String, dynamic>{
       ...raw,
       'username': raw['username'] ?? raw['xingming'] ?? loginInfo.username,
@@ -183,6 +242,16 @@ class HybridRuntimeContext {
       'qycode': raw['qycode'] ?? loginInfo.qycode,
       'zzjgdmz': raw['zzjgdmz'] ?? loginInfo.zzjgdmz,
       'ticket': raw['ticket'] ?? loginInfo.ticket,
+      'client': raw['client'] ?? (loginInfo.client.isNotEmpty ? loginInfo.client : '4'),
+      'isWifi': raw['isWifi'] ?? false,
+      'wifiName': raw['wifiName'] ?? '',
+      'wifiMac': raw['wifiMac'] ?? '',
+      'settings': raw['settings'] ?? const <String, dynamic>{},
+      'locationMsg': raw['locationMsg'] ?? jsonEncode(locationPayload),
+      'updatingLocationMsg':
+          raw['updatingLocationMsg'] ?? jsonEncode(locationPayload),
+      if (deviceIdentifier.isNotEmpty)
+        'deviceuuid': raw['deviceuuid'] ?? deviceIdentifier,
       if (deviceIdentifier.isNotEmpty)
         'dx_29_sbsbm': raw['dx_29_sbsbm'] ?? deviceIdentifier,
       if (deviceIdentifier.isNotEmpty)
