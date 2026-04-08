@@ -22,8 +22,34 @@ class BbtotalApp extends StatelessWidget {
     return MaterialApp(
       title: 'BBTotal',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF1F6FEB)),
+        colorScheme: const ColorScheme.light(
+          primary: Color(0xFF0A84FF),
+          secondary: Color(0xFF5AC8FA),
+          surface: Color(0xFFFFFFFF),
+          error: Color(0xFFFF453A),
+          onPrimary: Color(0xFFFFFFFF),
+          onSecondary: Color(0xFFFFFFFF),
+          onSurface: Color(0xFF111111),
+          onError: Color(0xFFFFFFFF),
+        ),
+        scaffoldBackgroundColor: const Color(0xFFF2F2F7),
+        splashFactory: NoSplash.splashFactory,
         useMaterial3: true,
+        pageTransitionsTheme: const PageTransitionsTheme(
+          builders: <TargetPlatform, PageTransitionsBuilder>{
+            TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+            TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+            TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+          },
+        ),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xFFF2F2F7),
+          foregroundColor: Color(0xFF111111),
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          centerTitle: true,
+        ),
+        textTheme: Typography.blackCupertino,
       ),
       home: const HybridCheckInPage(),
     );

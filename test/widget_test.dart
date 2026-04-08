@@ -3,12 +3,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:bbtotal/main.dart';
 
 void main() {
-  testWidgets('hybrid shell home renders', (WidgetTester tester) async {
+  testWidgets('hybrid entry home renders', (WidgetTester tester) async {
     await tester.pumpWidget(const BbtotalApp());
 
-    expect(find.text('Hybrid 容器 MVP'), findsOneWidget);
-    expect(find.text('状态'), findsOneWidget);
-    expect(find.text('目标页面'), findsOneWidget);
-    expect(find.text('打开内嵌页'), findsOneWidget);
+    expect(find.text('打卡入口'), findsOneWidget);
+    expect(find.text('输入姓名后按回车自动加载'), findsOneWidget);
+    expect(find.text('最近 5 次打卡位置'), findsOneWidget);
+    expect(find.text('主动发起'), findsOneWidget);
+    expect(find.text('待办处理'), findsOneWidget);
   });
 }

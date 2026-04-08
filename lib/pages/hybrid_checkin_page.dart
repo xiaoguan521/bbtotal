@@ -1,8 +1,7 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import '../models/check_in_history_location.dart';
 import '../models/check_in_location_preset.dart';
@@ -10,11 +9,9 @@ import '../models/hybrid_runtime_context.dart';
 import '../models/user_login_info.dart';
 import '../services/check_in_history_service.dart';
 import '../services/cheque_service.dart';
-import '../services/hybrid_bridge_service.dart';
-import '../services/hybrid_diagnostics_service.dart';
-import '../services/location_service.dart';
 import '../services/pending_todo_service.dart';
 import '../services/user_login_info_service.dart';
+import 'hybrid_webview_page.dart';
 
 class HybridCheckInPage extends StatefulWidget {
   const HybridCheckInPage({super.key});
@@ -24,22 +21,6 @@ class HybridCheckInPage extends StatefulWidget {
 }
 
 class _HybridCheckInPageState extends State<HybridCheckInPage> {
-  late final TextEditingController _usernameController = TextEditingController();
-  late final TextEditingController _addressController =
-      TextEditingController(text: '河北省石家庄市鹿泉区御园路71号靠近光谷科技园');
-  late final TextEditingController _longitudeController =
-      TextEditingController(text: '114.347315');
-  late final TextEditingController _latitudeController =
-      TextEditingController(text: '38.050979');
-
-  final LocationService _locationService = LocationService();
-  final ChequeService _chequeService = ChequeService();
-  final CheckInHistoryService _checkInHistoryService = CheckInHistoryService();
-  final PendingTodoService _pendingTodoService = PendingTodoService();
-  final UserLoginInfoService _userLoginInfoService = UserLoginInfoService();
-  final HybridBridgeService _hybridBridgeService = const HybridBridgeService();
-  final HybridDiagnosticsService _diagnostics = HybridDiagnosticsService();
-
   static const String _initiateBaseUrl =
       'https://appsy.jbysoft.com/dxgl-app/dxslgl/#/dxslglComp/dxslglfq/index';
   static const String _approvalBaseUrl =
@@ -49,359 +30,274 @@ class _HybridCheckInPageState extends State<HybridCheckInPage> {
   static const String _approvalZtConfig =
       '7171a46ae52cd9c7c0278a72c65492b0fd234129620126cd57ac2fccaaec061b0abed44bcb02786c4057648caf5b99b6a47cd85e2d21008f7399b6cf5fdeb7ea09b27db192ee5320e008c8c888a156ab41012aa0eea91e2a034cd260ee71bc6e6c20b42e49633af74bfc77a9e1142c02c45548a3e3e89cc6a93eda4ca371a379';
 
+  final TextEditingController _usernameController = TextEditingController();
+  final CheckInHistoryService _checkInHistoryService = CheckInHistoryService();
+  final ChequeService _chequeService = ChequeService();
+  final PendingTodoService _pendingTodoService = PendingTodoService();
+  final UserLoginInfoService _userLoginInfoService = UserLoginInfoService();
+
   List<CheckInHistoryLocation> _historyLocations = <CheckInHistoryLocation>[];
   UserLoginInfo? _loginInfo;
   CheckInLocationPreset? _preparedPreset;
-  HybridRuntimeContext? _runtimeContext;
-  InAppWebViewController? _webViewController;
-  Key _webViewKey = UniqueKey();
-  bool _isLoadingHistory = false;
-  bool _isLoadingCheque = false;
-  bool _isLoadingPendingTodos = false;
-  bool _isResolvingLoginInfo = false;
-  bool _isLoadingWebView = false;
-  double _webProgress = 0;
-  String _status = '准备一个最小 hybrid 容器：先配置 URL、登录信息和位置，再打开内嵌页面。';
+  String? _selectedHistoryKey;
+  String? _resolvedUsername;
+  bool _isPreparingUserContext = false;
+  bool _isLaunchingInitiate = false;
+  bool _isLaunchingPending = false;
 
-  @override
-  void initState() {
-    super.initState();
-    _locationService.lastError.addListener(_syncErrorState);
+  bool get _isBusy =>
+      _isPreparingUserContext || _isLaunchingInitiate || _isLaunchingPending;
+
+  CheckInHistoryLocation? get _selectedHistoryLocation {
+    final String? selectedHistoryKey = _selectedHistoryKey;
+    if (selectedHistoryKey == null) {
+      return _historyLocations.isEmpty ? null : _historyLocations.first;
+    }
+
+    for (final CheckInHistoryLocation item in _historyLocations) {
+      if (item.uniqueKey == selectedHistoryKey) {
+        return item;
+      }
+    }
+    return _historyLocations.isEmpty ? null : _historyLocations.first;
   }
 
-  void _syncErrorState() {
-    final String? error = _locationService.lastError.value;
-    if (!mounted || error == null || error.isEmpty) {
+  void _showMessage(String message) {
+    if (!mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  void _handleUsernameChanged(String value) {
+    final String trimmed = value.trim();
+    if (_resolvedUsername == null || trimmed == _resolvedUsername) {
       return;
     }
 
     setState(() {
-      _status = error;
+      _resolvedUsername = null;
+      _loginInfo = null;
+      _historyLocations = <CheckInHistoryLocation>[];
+      _selectedHistoryKey = null;
+      _preparedPreset = null;
     });
   }
 
-  void _log(String message) {
-    _diagnostics.add(message);
-  }
-
-  Future<void> _fillWithCurrentCoordinates() async {
-    try {
-      final position = await _locationService.getCurrentPosition();
-      if (!mounted) {
-        return;
-      }
-
-      _longitudeController.text = position.longitude.toStringAsFixed(6);
-      _latitudeController.text = position.latitude.toStringAsFixed(6);
-      setState(() {
-        _status = '已使用设备当前坐标更新桥接位置。';
-      });
-      _log(
-        'Location updated from device: ${position.longitude.toStringAsFixed(6)}, '
-        '${position.latitude.toStringAsFixed(6)}',
-      );
-    } on LocationServiceException catch (error) {
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _status = error.message;
-      });
-    }
-  }
-
-  CheckInLocationPreset? _buildPresetFromInputs(UserLoginInfo loginInfo) {
-    final String address = _addressController.text.trim();
-    final double? longitude = double.tryParse(_longitudeController.text.trim());
-    final double? latitude = double.tryParse(_latitudeController.text.trim());
-
-    if (address.isEmpty || longitude == null || latitude == null) {
-      setState(() {
-        _status = '请先填写或选择有效的地址、经度和纬度。';
-      });
-      return null;
-    }
-
-    return CheckInLocationPreset(
-      address: address,
-      longitude: longitude,
-      latitude: latitude,
-      loginInfo: loginInfo,
-      province: '河北省',
-      city: '石家庄市',
-      district: '鹿泉区',
-      street: '御园路',
-      cityCode: '0311',
-      provinceCode: '130000',
-      adCode: '130110',
-      provinceReferred: '冀',
-    );
-  }
-
-  Future<UserLoginInfo?> _fetchMobileLoginInfo() async {
+  Future<UserLoginInfo?> _ensureUserContext({
+    bool forceRefresh = false,
+  }) async {
     final String username = _usernameController.text.trim();
     if (username.isEmpty) {
-      setState(() {
-        _status = '请输入姓名后再查询移动端登录 token。';
-      });
+      _showMessage('请先输入姓名。');
       return null;
+    }
+
+    if (!forceRefresh &&
+        _loginInfo != null &&
+        _resolvedUsername == username &&
+        _historyLocations.isNotEmpty) {
+      return _loginInfo;
     }
 
     setState(() {
-      _isResolvingLoginInfo = true;
-      _status = '正在查询移动端 app_02 登录 token...';
+      _isPreparingUserContext = true;
     });
 
     try {
       final UserLoginInfo loginInfo =
           await _userLoginInfoService.fetchMobileLoginInfo(username);
+      final List<CheckInHistoryLocation> historyLocations =
+          await _checkInHistoryService.fetchRecentLocations(loginInfo);
+
       if (!mounted) {
         return null;
       }
 
       setState(() {
         _loginInfo = loginInfo;
-        _status = '已获取 ${loginInfo.qdmc ?? loginInfo.blqd} 的登录 token。';
+        _resolvedUsername = username;
+        _historyLocations = historyLocations;
+        _selectedHistoryKey =
+            historyLocations.isEmpty ? null : historyLocations.first.uniqueKey;
+        _preparedPreset = null;
       });
-      _log('Fetched login info for ${loginInfo.username}.');
-      unawaited(_fetchRecentHistoryLocations(loginInfo: loginInfo));
+
+      if (historyLocations.isEmpty) {
+        _showMessage('最近 5 天没有查询到可用的打卡位置。');
+      }
+
       return loginInfo;
     } on UserLoginInfoServiceException catch (error) {
-      if (!mounted) {
-        return null;
-      }
-
-      setState(() {
-        _status = error.message;
-      });
-      return null;
-    } on TimeoutException {
-      if (!mounted) {
-        return null;
-      }
-
-      setState(() {
-        _status = '登录 token 查询超时，请稍后重试。';
-      });
-      return null;
-    } catch (error) {
-      if (!mounted) {
-        return null;
-      }
-
-      setState(() {
-        _status = '登录 token 查询失败：$error';
-      });
-      return null;
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isResolvingLoginInfo = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _fetchRecentHistoryLocations({
-    UserLoginInfo? loginInfo,
-  }) async {
-    final UserLoginInfo? resolvedLoginInfo = loginInfo ?? _loginInfo;
-    if (resolvedLoginInfo == null) {
-      setState(() {
-        _status = '请先查询移动端 Token，再加载历史打卡位置。';
-      });
-      return;
-    }
-
-    setState(() {
-      _isLoadingHistory = true;
-      _status = '正在查询最近5天的历史打卡位置...';
-    });
-
-    try {
-      final List<CheckInHistoryLocation> items = await _checkInHistoryService
-          .fetchRecentLocations(resolvedLoginInfo);
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _historyLocations = items;
-        _status = items.isEmpty
-            ? '最近5天没有查询到可用的历史打卡位置。'
-            : '已加载最近5天内的 ${items.length} 个历史打卡位置。';
-      });
-      _log('Loaded ${items.length} recent history locations.');
+      _showMessage(error.message);
     } on CheckInHistoryServiceException catch (error) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _status = error.message;
-      });
+      _showMessage(error.message);
     } on TimeoutException {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _status = '历史打卡位置查询超时，请稍后重试。';
-      });
+      _showMessage('请求超时，请稍后重试。');
     } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _status = '历史打卡位置查询失败：$error';
-      });
+      _showMessage('准备用户信息失败：$error');
     } finally {
       if (mounted) {
         setState(() {
-          _isLoadingHistory = false;
+          _isPreparingUserContext = false;
         });
       }
     }
+
+    return null;
   }
 
-  Future<void> _fetchChequeInfo() async {
-    final UserLoginInfo? loginInfo = _loginInfo ?? await _fetchMobileLoginInfo();
-    if (!mounted || loginInfo == null) {
-      return;
+  Future<CheckInLocationPreset?> _ensurePreparedPreset(
+    UserLoginInfo loginInfo,
+  ) async {
+    final CheckInHistoryLocation? historyLocation = _selectedHistoryLocation;
+    if (historyLocation == null) {
+      _showMessage('请先选择一个最近打卡位置。');
+      return null;
     }
 
-    final CheckInLocationPreset? preset = _buildPresetFromInputs(loginInfo);
-    if (preset == null) {
-      return;
+    final CheckInLocationPreset basePreset = _buildPresetFromHistory(
+      loginInfo: loginInfo,
+      item: historyLocation,
+    );
+    final CheckInLocationPreset? currentPreparedPreset = _preparedPreset;
+    if (currentPreparedPreset != null &&
+        currentPreparedPreset.cheque.isNotEmpty &&
+        currentPreparedPreset.address == basePreset.address &&
+        currentPreparedPreset.coordinateText == basePreset.coordinateText &&
+        currentPreparedPreset.loginInfo.loginToken == loginInfo.loginToken) {
+      return currentPreparedPreset;
     }
 
+    try {
+      final ChequeInfo chequeInfo = await _chequeService.fetchCheque(basePreset);
+      final CheckInLocationPreset preparedPreset = basePreset.copyWith(
+        cheque: chequeInfo.cheque,
+        ticket: chequeInfo.ticket,
+      );
+
+      if (!mounted) {
+        return preparedPreset;
+      }
+
+      setState(() {
+        _preparedPreset = preparedPreset;
+      });
+      return preparedPreset;
+    } on ChequeServiceException catch (error) {
+      _showMessage(error.message);
+    } on TimeoutException {
+      _showMessage('会话信息查询超时，请稍后重试。');
+    } catch (error) {
+      _showMessage('会话信息查询失败：$error');
+    }
+
+    return null;
+  }
+
+  CheckInLocationPreset _buildPresetFromHistory({
+    required UserLoginInfo loginInfo,
+    required CheckInHistoryLocation item,
+  }) {
+    final _LocationMetadata metadata = _inferLocationMetadata(item.address);
+    return CheckInLocationPreset(
+      address: item.address,
+      latitude: item.latitude!,
+      loginInfo: loginInfo,
+      longitude: item.longitude!,
+      province: metadata.province,
+      city: metadata.city,
+      district: metadata.district,
+      street: metadata.street,
+      cityCode: metadata.cityCode,
+      provinceCode: metadata.provinceCode,
+      adCode: metadata.adCode,
+      provinceReferred: metadata.provinceReferred,
+    );
+  }
+
+  Future<void> _openInitiatePage() async {
     setState(() {
-      _isLoadingCheque = true;
-      _status = '正在查询 cheque / ticket...';
+      _isLaunchingInitiate = true;
     });
 
     try {
-      final chequeInfo = await _chequeService.fetchCheque(preset);
-      if (!mounted) {
+      final UserLoginInfo? loginInfo = await _ensureUserContext();
+      if (!mounted || loginInfo == null) {
         return;
       }
 
-      setState(() {
-        _preparedPreset = preset.copyWith(
-          cheque: chequeInfo.cheque,
-          ticket: chequeInfo.ticket,
-        );
-        _status = '已获取 cheque / ticket，可用于内嵌页会话启动。';
-      });
-      _log('Fetched cheque/ticket for hybrid bootstrap.');
-    } on ChequeServiceException catch (error) {
-      if (!mounted) {
+      final CheckInLocationPreset? preset = await _ensurePreparedPreset(loginInfo);
+      if (!mounted || preset == null) {
         return;
       }
-      setState(() {
-        final String debugText =
-            _chequeService.lastDebugInfo?.toMultilineText() ?? '';
-        _status = 'cheque / ticket 查询失败：${error.message}'
-            '${debugText.isEmpty ? '' : '\n\n$debugText'}';
-      });
-    } on TimeoutException {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        final String debugText =
-            _chequeService.lastDebugInfo?.toMultilineText() ?? '';
-        _status = 'cheque / ticket 查询超时。'
-            '${debugText.isEmpty ? '' : '\n\n$debugText'}';
-      });
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        final String debugText =
-            _chequeService.lastDebugInfo?.toMultilineText() ?? '';
-        _status = 'cheque / ticket 查询失败：$error'
-            '${debugText.isEmpty ? '' : '\n\n$debugText'}';
-      });
+
+      final String url = _buildInitiatePageUrl(loginInfo);
+      _navigateToWebView(
+        rawUrl: url,
+        preset: preset,
+        title: '主动发起',
+      );
     } finally {
       if (mounted) {
         setState(() {
-          _isLoadingCheque = false;
+          _isLaunchingInitiate = false;
         });
       }
     }
   }
 
   Future<void> _openPendingTodoPage() async {
-    final UserLoginInfo? loginInfo = _loginInfo ?? await _fetchMobileLoginInfo();
-    if (!mounted || loginInfo == null) {
-      return;
-    }
-
     setState(() {
-      _isLoadingPendingTodos = true;
-      _status = '正在查询待办...';
+      _isLaunchingPending = true;
     });
 
     try {
-      final Map<String, dynamic> payload =
-          await _pendingTodoService.fetchPendingTodos(loginInfo);
-      if (!mounted) {
-        return;
-      }
-
-      final List<Map<String, dynamic>> items = _extractTodoItems(payload);
-      if (items.isEmpty) {
-        setState(() {
-          _status = '没有查询到可用待办。';
-        });
-        _log('Fetched pending todos: 0 items.');
+      final UserLoginInfo? loginInfo = await _ensureUserContext();
+      if (!mounted || loginInfo == null) {
         return;
       }
 
       final CheckInLocationPreset? preset = await _ensurePreparedPreset(loginInfo);
+      if (!mounted || preset == null) {
+        return;
+      }
+
+      final Map<String, dynamic> payload =
+          await _pendingTodoService.fetchPendingTodos(loginInfo);
+      final List<Map<String, dynamic>> items = _extractTodoItems(payload);
       if (!mounted) {
         return;
       }
 
-      final String approvalUrl = _buildApprovalPageUrl(
+      if (items.isEmpty) {
+        _showMessage('没有查询到可处理的待办。');
+        return;
+      }
+
+      final String url = _buildApprovalPageUrl(
         loginInfo: loginInfo,
         todo: items.first,
-        cheque: preset?.cheque ?? '',
+        cheque: preset.cheque,
       );
-      _log(
-        'Fetched pending todos: ${items.length} items, opening first businessKey='
-        '${_readNestedString(items.first, 'bpmxq', 'businessKey')}.',
-      );
-      _openEmbeddedPage(
-        approvalUrl,
+      _navigateToWebView(
+        rawUrl: url,
         preset: preset,
-        statusMessage: '正在打开待办处理页面...',
+        title: '待办处理',
       );
     } on PendingTodoServiceException catch (error) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _status = error.message;
-      });
+      _showMessage(error.message);
     } on TimeoutException {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _status = '待办查询超时，请稍后重试。';
-      });
+      _showMessage('待办查询超时，请稍后重试。');
     } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _status = '待办查询失败：$error';
-      });
+      _showMessage('待办查询失败：$error');
     } finally {
       if (mounted) {
         setState(() {
-          _isLoadingPendingTodos = false;
+          _isLaunchingPending = false;
         });
       }
     }
@@ -409,117 +305,43 @@ class _HybridCheckInPageState extends State<HybridCheckInPage> {
 
   List<Map<String, dynamic>> _extractTodoItems(Map<String, dynamic> payload) {
     final Object? results = payload['results'];
-    if (results is List) {
-      return results
-          .whereType<Map>()
-          .map(
-            (Map item) => item.map<String, dynamic>(
-              (dynamic key, dynamic value) => MapEntry(key.toString(), value),
-            ),
-          )
-          .toList();
+    if (results is! List) {
+      return <Map<String, dynamic>>[];
     }
 
-    return <Map<String, dynamic>>[];
+    return results
+        .whereType<Map>()
+        .map(
+          (Map item) => item.map<String, dynamic>(
+            (dynamic key, dynamic value) => MapEntry(key.toString(), value),
+          ),
+        )
+        .toList();
   }
 
-  String _readNestedString(
-    Map<String, dynamic> payload,
-    String section,
-    String key,
-  ) {
-    final Object? group = payload[section];
-    if (group is Map<String, dynamic>) {
-      return (group[key] ?? '').toString();
-    }
-    if (group is Map) {
-      return (group[key] ?? '').toString();
-    }
-    return '';
-  }
-
-  Future<CheckInLocationPreset?> _ensurePreparedPreset(
-    UserLoginInfo loginInfo,
-  ) async {
-    final CheckInLocationPreset? current = _preparedPreset;
-    if (current != null && current.cheque.isNotEmpty) {
-      return current;
-    }
-
-    await _fetchChequeInfo();
-    return _preparedPreset ?? _buildPresetFromInputs(loginInfo);
-  }
-
-  void _applyHistoryLocation(CheckInHistoryLocation item) {
-    if (item.longitude == null || item.latitude == null) {
-      return;
-    }
-
-    _addressController.text = item.address;
-    _longitudeController.text = item.longitude!.toString();
-    _latitudeController.text = item.latitude!.toString();
-
-    setState(() {
-      _status = '已使用历史打卡位置：${item.address}';
-      _preparedPreset = null;
-    });
-    _log('Applied history location ${item.address}.');
-  }
-
-  void _clearDiagnostics() {
-    _diagnostics.clear();
-    setState(() {
-      _status = '已清空诊断日志。';
-    });
-  }
-
-  void _openEmbeddedPage(
-    String rawUrl, {
-    CheckInLocationPreset? preset,
-    String statusMessage = '正在打开内嵌页面...',
+  void _navigateToWebView({
+    required String rawUrl,
+    required CheckInLocationPreset preset,
+    required String title,
   }) {
     try {
-      final HybridRuntimeContext runtimeContext =
-          HybridRuntimeContext.fromInputs(
+      final HybridRuntimeContext runtimeContext = HybridRuntimeContext.fromInputs(
         baseUrl: rawUrl,
         loginInfo: _loginInfo,
         preset: preset,
       );
 
-      _diagnostics.clear();
-      _log('Prepared hybrid runtime for ${runtimeContext.resolvedUri}.');
-      setState(() {
-        _runtimeContext = runtimeContext;
-        _webViewController = null;
-        _webViewKey = UniqueKey();
-        _webProgress = 0;
-        _isLoadingWebView = true;
-        _status = statusMessage;
-      });
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (BuildContext context) => HybridWebViewPage(
+            runtimeContext: runtimeContext,
+            title: title,
+          ),
+        ),
+      );
     } catch (error) {
-      setState(() {
-        _status = 'URL 无效：$error';
-      });
+      _showMessage('页面地址生成失败：$error');
     }
-  }
-
-  Future<void> _openInitiatePage() async {
-    final UserLoginInfo? loginInfo = _loginInfo ?? await _fetchMobileLoginInfo();
-    if (!mounted || loginInfo == null) {
-      return;
-    }
-
-    final CheckInLocationPreset? preset = await _ensurePreparedPreset(loginInfo);
-    if (!mounted) {
-      return;
-    }
-
-    final String initiateUrl = _buildInitiatePageUrl(loginInfo);
-    _openEmbeddedPage(
-      initiateUrl,
-      preset: preset,
-      statusMessage: '正在打开主动发起页面...',
-    );
   }
 
   String _buildInitiatePageUrl(UserLoginInfo loginInfo) {
@@ -606,6 +428,21 @@ class _HybridCheckInPageState extends State<HybridCheckInPage> {
     return _buildHashRouteUrl(_approvalBaseUrl, queryParameters);
   }
 
+  String _readNestedString(
+    Map<String, dynamic> payload,
+    String section,
+    String key,
+  ) {
+    final Object? group = payload[section];
+    if (group is Map<String, dynamic>) {
+      return (group[key] ?? '').toString();
+    }
+    if (group is Map) {
+      return (group[key] ?? '').toString();
+    }
+    return '';
+  }
+
   String _buildHashRouteUrl(
     String baseUrl,
     Map<String, String> queryParameters,
@@ -622,489 +459,531 @@ class _HybridCheckInPageState extends State<HybridCheckInPage> {
     return query.isEmpty ? baseUrl : '$baseUrl?$query';
   }
 
-  Future<void> _initializeWebView(InAppWebViewController controller) async {
-    final HybridRuntimeContext? runtimeContext = _runtimeContext;
-    if (runtimeContext == null) {
-      return;
+  _LocationMetadata _inferLocationMetadata(String address) {
+    final String province = address.contains('河北') ? '河北省' : '';
+    final String city = address.contains('石家庄') ? '石家庄市' : '';
+    String district = '';
+    String adCode = '';
+
+    if (address.contains('鹿泉区')) {
+      district = '鹿泉区';
+      adCode = '130110';
+    } else if (address.contains('新华区')) {
+      district = '新华区';
+      adCode = '130105';
+    } else if (address.contains('桥西区')) {
+      district = '桥西区';
+      adCode = '130104';
+    } else if (address.contains('长安区')) {
+      district = '长安区';
+      adCode = '130102';
     }
 
-    _webViewController = controller;
-    _hybridBridgeService.registerHandlers(
-      controller: controller,
-      onLog: (String message) => _log('js: $message'),
-      onPostMessage: (String payload) => _log('postMessage: $payload'),
-      onOpenUrl: (String url) {
-        _log('openUrl requested: $url');
-        if (!mounted) {
-          return;
-        }
-        setState(() {
-          _status = '页面请求打开新地址：$url';
-        });
-      },
-      onClosePage: () {
-        _log('closePage requested');
-        if (!mounted) {
-          return;
-        }
-        setState(() {
-          _status = '页面请求关闭当前容器。';
-          _runtimeContext = null;
-          _webViewController = null;
-          _isLoadingWebView = false;
-          _webProgress = 0;
-        });
-      },
-    );
+    String street = '';
+    final RegExp streetExp = RegExp(r'([\u4e00-\u9fa5A-Za-z0-9]+(?:路|街|大道))');
+    final RegExpMatch? streetMatch = streetExp.firstMatch(address);
+    if (streetMatch != null) {
+      street = streetMatch.group(1) ?? '';
+    }
 
-    await _hybridBridgeService.bootstrapCookies(
-      runtimeContext,
-      onLog: _log,
+    return _LocationMetadata(
+      province: province,
+      city: city,
+      district: district,
+      street: street,
+      cityCode: city.isEmpty ? '' : '0311',
+      provinceCode: province.isEmpty ? '' : '130000',
+      adCode: adCode,
+      provinceReferred: province.isEmpty ? '' : '冀',
     );
-
-    await controller.loadUrl(
-      urlRequest: URLRequest(
-        url: WebUri(runtimeContext.resolvedUri.toString()),
-      ),
-    );
-  }
-
-  Future<void> _reloadEmbeddedPage() async {
-    await _webViewController?.reload();
   }
 
   @override
   void dispose() {
-    _locationService.lastError.removeListener(_syncErrorState);
-    _chequeService.dispose();
     _checkInHistoryService.dispose();
-    _locationService.dispose();
+    _chequeService.dispose();
     _pendingTodoService.dispose();
     _userLoginInfoService.dispose();
     _usernameController.dispose();
-    _addressController.dispose();
-    _longitudeController.dispose();
-    _latitudeController.dispose();
-    _diagnostics.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final ThemeData theme = Theme.of(context);
-    final HybridRuntimeContext? runtimeContext = _runtimeContext;
+    final CheckInHistoryLocation? selectedHistoryLocation = _selectedHistoryLocation;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Hybrid 容器 MVP'),
-        actions: <Widget>[
-          IconButton(
-            tooltip: '清空日志',
-            onPressed: _clearDiagnostics,
-            icon: const Icon(Icons.clear_all),
-          ),
-          IconButton(
-            tooltip: '刷新内嵌页',
-            onPressed: runtimeContext == null ? null : _reloadEmbeddedPage,
-            icon: const Icon(Icons.refresh),
-          ),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: <Widget>[
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text('状态', style: theme.textTheme.titleMedium),
-                  const SizedBox(height: 8),
-                  Text(_status),
-                  const SizedBox(height: 8),
-                  Text(
-                    runtimeContext == null
-                        ? '尚未打开内嵌页。'
-                        : '当前容器 URL: ${runtimeContext.resolvedUri}',
-                    style: theme.textTheme.bodySmall,
-                  ),
-                ],
-              ),
+      backgroundColor: const Color(0xFFF2F2F7),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+          children: <Widget>[
+            const _IosHeroHeader(
+              title: '打卡入口',
+              subtitle: '自动准备身份、位置和会话参数，再进入业务页面。',
             ),
-          ),
-          const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
+            const SizedBox(height: 18),
+            const _SectionLabel('用户身份'),
+            const SizedBox(height: 8),
+            _IosSection(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  Text('页面入口', style: theme.textTheme.titleMedium),
-                  const SizedBox(height: 12),
-                  Text(
-                    '请选择要进入的业务入口。主动发起沿用原有发起逻辑；待办处理会先查询待办，再打开第一条审批页面。',
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    children: <Widget>[
-                      FilledButton.icon(
-                        onPressed: _openInitiatePage,
-                        icon: const Icon(Icons.playlist_add_circle_outlined),
-                        label: const Text('主动发起'),
+                  _IosInputRow(
+                    child: TextField(
+                      controller: _usernameController,
+                      enabled: !_isBusy,
+                      textInputAction: TextInputAction.done,
+                      onChanged: _handleUsernameChanged,
+                      onSubmitted: (_) => _ensureUserContext(forceRefresh: true),
+                      decoration: InputDecoration(
+                        hintText: '输入姓名后按回车自动加载',
+                        border: InputBorder.none,
+                        suffixIcon: _isPreparingUserContext
+                            ? const Padding(
+                                padding: EdgeInsets.all(12),
+                                child: SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CupertinoActivityIndicator(radius: 9),
+                                ),
+                              )
+                            : const Icon(
+                                CupertinoIcons.person_crop_circle_fill,
+                                color: Color(0xFF8E8E93),
+                              ),
                       ),
-                      FilledButton.icon(
-                        onPressed: _isLoadingPendingTodos ? null : _openPendingTodoPage,
-                        icon: const Icon(Icons.assignment_turned_in_outlined),
-                        label: Text(_isLoadingPendingTodos ? '查询中...' : '待办处理'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text('用户身份', style: theme.textTheme.titleMedium),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _usernameController,
-                    decoration: const InputDecoration(
-                      labelText: '姓名',
-                      hintText: '请输入姓名',
-                      border: OutlineInputBorder(),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  FilledButton.icon(
-                    onPressed: _isResolvingLoginInfo ? null : _fetchMobileLoginInfo,
-                    icon: const Icon(Icons.badge_outlined),
-                    label: Text(_isResolvingLoginInfo ? '查询中...' : '查询移动端 Token'),
                   ),
                   if (_loginInfo != null) ...<Widget>[
-                    const SizedBox(height: 12),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEFF5FF),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        '账号: ${_loginInfo!.account}\n'
-                        'Token: ${_loginInfo!.tokenPreview}\n'
-                        '渠道: ${_loginInfo!.blqd} / ${_loginInfo!.qdmc ?? '未知'}',
-                      ),
+                    const SizedBox(height: 14),
+                    _InfoPill(
+                      icon: CupertinoIcons.person_crop_circle_badge_checkmark,
+                      title: _loginInfo!.username,
+                      subtitle:
+                          '${_loginInfo!.account}  ·  ${_loginInfo!.tokenPreview}',
                     ),
                   ],
                 ],
               ),
             ),
-          ),
-          const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text('桥接位置', style: theme.textTheme.titleMedium),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _addressController,
-                    maxLines: 3,
-                    decoration: const InputDecoration(
-                      labelText: '地址',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _longitudeController,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                      signed: true,
-                    ),
-                    decoration: const InputDecoration(
-                      labelText: '经度',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _latitudeController,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                      signed: true,
-                    ),
-                    decoration: const InputDecoration(
-                      labelText: '纬度',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    children: <Widget>[
-                      FilledButton.icon(
-                        onPressed: _fillWithCurrentCoordinates,
-                        icon: const Icon(Icons.gps_fixed),
-                        label: const Text('使用当前坐标'),
-                      ),
-                      FilledButton.icon(
-                        onPressed: _isLoadingHistory
-                            ? null
-                            : () => _fetchRecentHistoryLocations(),
-                        icon: const Icon(Icons.history),
-                        label: Text(_isLoadingHistory ? '查询中...' : '查询历史位置'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text('会话辅助', style: theme.textTheme.titleMedium),
-                  const SizedBox(height: 12),
-                  FilledButton.icon(
-                    onPressed: _isLoadingCheque ? null : _fetchChequeInfo,
-                    icon: const Icon(Icons.verified_outlined),
-                    label: Text(_isLoadingCheque ? '查询中...' : '查询 cheque / ticket'),
-                  ),
-                  if (_preparedPreset != null) ...<Widget>[
-                    const SizedBox(height: 12),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEFF7EE),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        'cheque: ${_preparedPreset!.cheque}\n'
-                        'ticket: ${_preparedPreset!.ticket}',
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-          if (_historyLocations.isNotEmpty) ...<Widget>[
-            const SizedBox(height: 12),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
+            const SizedBox(height: 20),
+            const _SectionLabel('最近 5 次打卡位置'),
+            const SizedBox(height: 8),
+            if (_usernameController.text.trim().isEmpty)
+              const _HintPanel(
+                message: '先输入姓名，再从最近的打卡位置里选一个作为本次桥接定位。',
+              )
+            else if (_isPreparingUserContext)
+              const _HintPanel(message: '正在查询最近打卡位置...')
+            else if (_historyLocations.isEmpty)
+              _HintPanel(
+                message: _resolvedUsername == null
+                    ? '输入姓名后按回车，或直接点击下方按钮自动准备。'
+                    : '最近 5 天没有查询到可用打卡位置。',
+              )
+            else
+              _IosSection(
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text('最近历史位置', style: theme.textTheme.titleMedium),
-                    const SizedBox(height: 12),
-                    ..._historyLocations.map(
-                      (CheckInHistoryLocation item) => Column(
-                        children: <Widget>[
-                          ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: Text(item.address),
-                            subtitle: Text(
-                              '${item.timeText}\n'
-                              '${item.coordinateText}\n'
-                              '${item.deviceName.isEmpty ? '未知设备' : item.deviceName}',
+                  children: _historyLocations.map((CheckInHistoryLocation item) {
+                    final bool selected =
+                        item.uniqueKey == selectedHistoryLocation?.uniqueKey;
+                    final bool isLast = identical(item, _historyLocations.last);
+                    return Column(
+                      children: <Widget>[
+                        InkWell(
+                          onTap: _isBusy
+                              ? null
+                              : () {
+                                  setState(() {
+                                    _selectedHistoryKey = item.uniqueKey;
+                                    _preparedPreset = null;
+                                  });
+                                },
+                          borderRadius: BorderRadius.circular(20),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 4,
+                              vertical: 14,
                             ),
-                            isThreeLine: true,
-                            trailing: FilledButton.tonal(
-                              onPressed: () => _applyHistoryLocation(item),
-                              child: const Text('使用'),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                Container(
+                                  width: 28,
+                                  height: 28,
+                                  margin: const EdgeInsets.only(top: 2),
+                                  decoration: BoxDecoration(
+                                    color: selected
+                                        ? const Color(0xFF0A84FF)
+                                        : const Color(0xFFE5E5EA),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Icon(
+                                    selected
+                                        ? CupertinoIcons.check_mark
+                                        : CupertinoIcons.location_solid,
+                                    size: 16,
+                                    color: selected
+                                        ? Colors.white
+                                        : const Color(0xFF8E8E93),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: <Widget>[
+                                      Text(
+                                        item.address,
+                                        style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFF111111),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        item.timeText,
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          color: Color(0xFF6E6E73),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        item.coordinateText,
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          color: Color(0xFF6E6E73),
+                                        ),
+                                      ),
+                                      if (item.deviceName.isNotEmpty) ...<Widget>[
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          item.deviceName,
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            color: Color(0xFF6E6E73),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          if (item != _historyLocations.last) const Divider(),
-                        ],
-                      ),
-                    ),
-                  ],
+                        ),
+                        if (!isLast)
+                          const Divider(
+                            height: 1,
+                            indent: 40,
+                            color: Color(0xFFE5E5EA),
+                          ),
+                      ],
+                    );
+                  }).toList(),
                 ),
               ),
+            const SizedBox(height: 24),
+            _ActionButton(
+              label: _isLaunchingInitiate ? '处理中...' : '主动发起',
+              icon: CupertinoIcons.arrow_up_circle_fill,
+              onPressed: _isBusy ? null : _openInitiatePage,
+              filled: true,
+            ),
+            const SizedBox(height: 12),
+            _ActionButton(
+              label: _isLaunchingPending ? '处理中...' : '待办处理',
+              icon: CupertinoIcons.checkmark_seal_fill,
+              onPressed: _isBusy ? null : _openPendingTodoPage,
+              filled: false,
             ),
           ],
-          const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text('运行时预览', style: theme.textTheme.titleMedium),
-                  const SizedBox(height: 8),
-                  Text(
-                    runtimeContext == null
-                        ? '尚未生成运行时上下文。'
-                        : 'Origin: ${runtimeContext.origin}\n'
-                            'Headers: ${runtimeContext.authHeaders.keys.join(', ')}\n'
-                            'Storage Keys: ${runtimeContext.storageSeed.keys.join(', ')}',
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '说明：同步 bridge 数据在 document-start 注入；异步回调仅用于日志、openUrl 和 closePage，避免再次回到 runJavaScript 竞态。',
-                    style: theme.textTheme.bodySmall,
-                  ),
-                ],
-              ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HintPanel extends StatelessWidget {
+  const _HintPanel({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Text(
+        message,
+        style: const TextStyle(
+          fontSize: 14,
+          height: 1.45,
+          color: Color(0xFF6E6E73),
+        ),
+      ),
+    );
+  }
+}
+
+class _IosHeroHeader extends StatelessWidget {
+  const _IosHeroHeader({
+    required this.title,
+    required this.subtitle,
+  });
+
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(6, 8, 6, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 34,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF111111),
+              letterSpacing: -0.8,
             ),
           ),
-          Card(
-            clipBehavior: Clip.antiAlias,
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Row(
-                    children: <Widget>[
-                      Text('内嵌页', style: theme.textTheme.titleMedium),
-                      const Spacer(),
-                      if (_isLoadingWebView)
-                        Text('${(_webProgress * 100).round()}%'),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  if (_isLoadingWebView && _webProgress < 1)
-                    LinearProgressIndicator(value: _webProgress),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    height: 520,
-                    child: runtimeContext == null
-                        ? const DecoratedBox(
-                            decoration: BoxDecoration(
-                              color: Color(0xFFF6F8FB),
-                            ),
-                            child: Center(
-                              child: Text('配置 URL 后点击“打开内嵌页”。'),
-                            ),
-                          )
-                        : InAppWebView(
-                            key: _webViewKey,
-                            initialSettings: InAppWebViewSettings(
-                              isInspectable: kDebugMode,
-                              mediaPlaybackRequiresUserGesture: false,
-                              allowsInlineMediaPlayback: true,
-                              useShouldOverrideUrlLoading: true,
-                            ),
-                            initialUserScripts: _hybridBridgeService
-                                .buildInitialUserScripts(runtimeContext),
-                            onWebViewCreated: _initializeWebView,
-                            onLoadStart: (controller, url) {
-                              _log('loadStart: ${url ?? runtimeContext.resolvedUri}');
-                              if (!mounted) {
-                                return;
-                              }
-                              setState(() {
-                                _isLoadingWebView = true;
-                                _status = '页面开始加载：${url ?? runtimeContext.resolvedUri}';
-                              });
-                            },
-                            onLoadStop: (controller, url) {
-                              _log('loadStop: ${url ?? runtimeContext.resolvedUri}');
-                              if (!mounted) {
-                                return;
-                              }
-                              setState(() {
-                                _isLoadingWebView = false;
-                                _webProgress = 1;
-                                _status = '页面加载完成。';
-                              });
-                            },
-                            onProgressChanged: (controller, progress) {
-                              if (!mounted) {
-                                return;
-                              }
-                              setState(() {
-                                _webProgress = progress / 100;
-                                _isLoadingWebView = progress < 100;
-                              });
-                            },
-                            onConsoleMessage: (controller, consoleMessage) {
-                              _log(
-                                'console[${consoleMessage.messageLevel}]: ${consoleMessage.message}',
-                              );
-                            },
-                            onReceivedError: (controller, request, error) {
-                              _log(
-                                'error: ${request.url} -> ${error.description}',
-                              );
-                              if (!mounted) {
-                                return;
-                              }
-                              setState(() {
-                                _isLoadingWebView = false;
-                                _status = '页面错误：${error.description}';
-                              });
-                            },
-                            shouldOverrideUrlLoading:
-                                (controller, navigationAction) async {
-                              final WebUri? uri = navigationAction.request.url;
-                              if (uri == null) {
-                                return NavigationActionPolicy.ALLOW;
-                              }
-                              if (<String>{
-                                'http',
-                                'https',
-                                'file',
-                                'about',
-                                'data',
-                                'javascript',
-                              }.contains(uri.scheme)) {
-                                return NavigationActionPolicy.ALLOW;
-                              }
-                              _log('Blocked non-http(s) navigation: $uri');
-                              return NavigationActionPolicy.CANCEL;
-                            },
-                          ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text('诊断日志', style: theme.textTheme.titleMedium),
-                  const SizedBox(height: 8),
-                  AnimatedBuilder(
-                    animation: _diagnostics,
-                    builder: (BuildContext context, Widget? child) {
-                      final String logText = _diagnostics.entries.isEmpty
-                          ? 'No bridge events yet.'
-                          : _diagnostics.entries.join('\n');
-                      return SelectableText(logText);
-                    },
-                  ),
-                ],
-              ),
+          const SizedBox(height: 6),
+          Text(
+            subtitle,
+            style: const TextStyle(
+              fontSize: 15,
+              height: 1.4,
+              color: Color(0xFF6E6E73),
             ),
           ),
         ],
       ),
     );
   }
+}
+
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Text(
+        label.toUpperCase(),
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.6,
+          color: Color(0xFF8E8E93),
+        ),
+      ),
+    );
+  }
+}
+
+class _IosSection extends StatelessWidget {
+  const _IosSection({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: const <BoxShadow>[
+          BoxShadow(
+            color: Color(0x14000000),
+            blurRadius: 24,
+            offset: Offset(0, 10),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(16),
+      child: child,
+    );
+  }
+}
+
+class _IosInputRow extends StatelessWidget {
+  const _IosInputRow({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5F5F7),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: child,
+    );
+  }
+}
+
+class _InfoPill extends StatelessWidget {
+  const _InfoPill({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEAF3FF),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        children: <Widget>[
+          Container(
+            width: 34,
+            height: 34,
+            decoration: const BoxDecoration(
+              color: Color(0xFF0A84FF),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: Colors.white, size: 18),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF111111),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF6E6E73),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActionButton extends StatelessWidget {
+  const _ActionButton({
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+    required this.filled,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback? onPressed;
+  final bool filled;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool enabled = onPressed != null;
+    final Color backgroundColor = filled
+        ? (enabled ? const Color(0xFF0A84FF) : const Color(0x660A84FF))
+        : (enabled ? Colors.white : const Color(0xFFF0F0F3));
+    final Color foregroundColor =
+        filled ? Colors.white : const Color(0xFF111111);
+
+    return SizedBox(
+      width: double.infinity,
+      child: CupertinoButton(
+        padding: EdgeInsets.zero,
+        onPressed: onPressed,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          height: 58,
+          decoration: BoxDecoration(
+            color: backgroundColor,
+            borderRadius: BorderRadius.circular(20),
+            border: filled
+                ? null
+                : Border.all(color: const Color(0xFFE5E5EA)),
+            boxShadow: filled
+                ? const <BoxShadow>[
+                    BoxShadow(
+                      color: Color(0x290A84FF),
+                      blurRadius: 20,
+                      offset: Offset(0, 10),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              Icon(icon, color: foregroundColor, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                  color: foregroundColor,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LocationMetadata {
+  const _LocationMetadata({
+    required this.province,
+    required this.city,
+    required this.district,
+    required this.street,
+    required this.cityCode,
+    required this.provinceCode,
+    required this.adCode,
+    required this.provinceReferred,
+  });
+
+  final String province;
+  final String city;
+  final String district;
+  final String street;
+  final String cityCode;
+  final String provinceCode;
+  final String adCode;
+  final String provinceReferred;
 }
