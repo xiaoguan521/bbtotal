@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -25,6 +26,8 @@ class HybridWebViewPage extends StatefulWidget {
 class _HybridWebViewPageState extends State<HybridWebViewPage> {
   final HybridBridgeService _hybridBridgeService = const HybridBridgeService();
   final HybridDiagnosticsService _diagnostics = HybridDiagnosticsService();
+  late final Map<String, String> _appCache =
+      Map<String, String>.from(widget.runtimeContext.storageSeed);
 
   InAppWebViewController? _webViewController;
   bool _isLoading = true;
@@ -243,18 +246,7 @@ class _HybridWebViewPageState extends State<HybridWebViewPage> {
       return '';
     }
 
-    final String script = '''
-(() => {
-  const key = ${jsonEncode(key)};
-  const fromLocal = window.localStorage ? window.localStorage.getItem(key) : null;
-  if (fromLocal != null) return fromLocal;
-  const fromSession = window.sessionStorage ? window.sessionStorage.getItem(key) : null;
-  if (fromSession != null) return fromSession;
-  return '';
-})()
-''';
-    final Object? result = await controller.evaluateJavascript(source: script);
-    final String value = _normalizeJsResult(result);
+    final String value = _appCache[key] ?? '';
     final String callbackScript = '''
 (() => {
   const payload = ${jsonEncode(<String, dynamic>{
@@ -271,7 +263,15 @@ class _HybridWebViewPageState extends State<HybridWebViewPage> {
   }
 })()
 ''';
-    await controller.evaluateJavascript(source: callbackScript);
+    unawaited(
+      Future<void>.delayed(const Duration(milliseconds: 1), () async {
+        try {
+          await controller.evaluateJavascript(source: callbackScript);
+        } catch (error) {
+          _log('getAppCache callback failed: $error');
+        }
+      }),
+    );
     return '';
   }
 
@@ -280,25 +280,14 @@ class _HybridWebViewPageState extends State<HybridWebViewPage> {
     Map<String, dynamic> payload,
   ) async {
     final String key = (payload['key'] ?? '').toString();
-    final String value = (payload['value'] ?? '').toString();
+    final Object? rawValue = payload['value'] ?? payload['data'];
+    final String value = rawValue == null ? '' : rawValue.toString();
     if (key.isEmpty) {
       return '';
     }
 
-    final String script = '''
-(() => {
-  const key = ${jsonEncode(key)};
-  const value = ${jsonEncode(value)};
-  try {
-    if (window.localStorage) window.localStorage.setItem(key, value);
-    if (window.sessionStorage) window.sessionStorage.setItem(key, value);
-    return 'success';
-  } catch (_) {
-    return '';
-  }
-})()
-''';
-    await controller.evaluateJavascript(source: script);
+    _appCache[key] = value;
+    unawaited(_syncAppCacheToPage(controller, key: key, value: value));
     return '';
   }
 
@@ -311,54 +300,64 @@ class _HybridWebViewPageState extends State<HybridWebViewPage> {
       return '';
     }
 
-    final String script = '''
+    _appCache.remove(key);
+    unawaited(_syncAppCacheToPage(controller, key: key, remove: true));
+    return '';
+  }
+
+  Future<String> _clearAppCache(InAppWebViewController controller) async {
+    _appCache.clear();
+    unawaited(_syncAppCacheToPage(controller, clearAll: true));
+    return '';
+  }
+
+  Future<void> _syncAppCacheToPage(
+    InAppWebViewController controller, {
+    String? key,
+    String? value,
+    bool remove = false,
+    bool clearAll = false,
+  }) async {
+    final String script;
+    if (clearAll) {
+      script = '''
+(() => {
+  try {
+    if (window.localStorage) window.localStorage.clear();
+    if (window.sessionStorage) window.sessionStorage.clear();
+  } catch (_) {}
+})()
+''';
+    } else if (remove && key != null) {
+      script = '''
 (() => {
   const key = ${jsonEncode(key)};
   try {
     if (window.localStorage) window.localStorage.removeItem(key);
     if (window.sessionStorage) window.sessionStorage.removeItem(key);
-    return 'success';
-  } catch (_) {
-    return '';
-  }
+  } catch (_) {}
 })()
 ''';
-    await controller.evaluateJavascript(source: script);
-    return '';
-  }
-
-  Future<String> _clearAppCache(InAppWebViewController controller) async {
-    const String script = '''
+    } else if (key != null) {
+      script = '''
 (() => {
+  const key = ${jsonEncode(key)};
+  const value = ${jsonEncode(value ?? '')};
   try {
-    if (window.localStorage) window.localStorage.clear();
-    if (window.sessionStorage) window.sessionStorage.clear();
-    return 'success';
-  } catch (_) {
-    return '';
-  }
+    if (window.localStorage) window.localStorage.setItem(key, value);
+    if (window.sessionStorage) window.sessionStorage.setItem(key, value);
+  } catch (_) {}
 })()
 ''';
-    await controller.evaluateJavascript(source: script);
-    return '';
-  }
+    } else {
+      return;
+    }
 
-  String _normalizeJsResult(Object? result) {
-    if (result == null) {
-      return '';
+    try {
+      await controller.evaluateJavascript(source: script);
+    } catch (error) {
+      _log('syncAppCacheToPage failed: $error');
     }
-    final String raw = result.toString();
-    if (raw == 'null' || raw == 'undefined') {
-      return '';
-    }
-    if (raw.length >= 2 && raw.startsWith('"') && raw.endsWith('"')) {
-      try {
-        return jsonDecode(raw) as String;
-      } catch (_) {
-        return raw.substring(1, raw.length - 1);
-      }
-    }
-    return raw;
   }
 
   @override
