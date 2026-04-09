@@ -195,6 +195,56 @@ class HybridBridgeService {
     return target;
   };
 
+  const parseObjectPayload = (value) => {
+    const parsed = parseJsonLikePayload(value);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed;
+    }
+    return null;
+  };
+
+  const normalizeLocationPayload = (value) => {
+    const fallback =
+      runtime.locationPayload && typeof runtime.locationPayload === 'object'
+        ? runtime.locationPayload
+        : { data: {}, errorCode: 1, msg: '定位尚未准备' };
+    const parsed = parseObjectPayload(value);
+    if (!parsed) {
+      return fallback;
+    }
+
+    if (parsed.data && typeof parsed.data === 'object' && !Array.isArray(parsed.data)) {
+      return mergeDefined(fallback, parsed, {
+        data: mergeDefined(fallback.data || {}, parsed.data || {}),
+      });
+    }
+
+    const locationKeys = [
+      'latitude',
+      'longitude',
+      'address',
+      'province',
+      'city',
+      'district',
+      'street',
+      'cityCode',
+      'provinceCode',
+      'adCode',
+      'provinceReferred',
+      'isVirtuallocation',
+    ];
+    const looksLikeLocation = locationKeys.some((key) =>
+      Object.prototype.hasOwnProperty.call(parsed, key),
+    );
+    if (!looksLikeLocation) {
+      return mergeDefined(fallback, parsed);
+    }
+
+    return mergeDefined(fallback, parsed, {
+      data: mergeDefined(fallback.data || {}, parsed),
+    });
+  };
+
   const normalizeDeviceFields = (payload) => {
     const next =
       payload && typeof payload === 'object' && !Array.isArray(payload)
@@ -236,6 +286,10 @@ class HybridBridgeService {
   const syncBbgrxx = (payload) => {
     const normalized = normalizeDeviceFields(
       mergeDefined(runtime.bbgrxx || {}, window.bbgrxx || {}, payload || {}),
+    );
+    normalized.locationMsg = normalizeLocationPayload(normalized.locationMsg);
+    normalized.updatingLocationMsg = normalizeLocationPayload(
+      normalized.updatingLocationMsg || normalized.locationMsg,
     );
     window.bbgrxx = normalized;
     const serialized = stringify(normalized);

@@ -59,5 +59,7 @@ void main() {
       contains('window.__bbtotalSyncBbgrxxFromUserinfo = syncBbgrxxFromUserinfo;'),
     );
     expect(source, contains('mobileUtilsPatchAttempts >= 120'));
+    expect(source, contains('normalized.locationMsg = normalizeLocationPayload'));
+    expect(source, contains('normalized.updatingLocationMsg = normalizeLocationPayload'));
   });
 }
