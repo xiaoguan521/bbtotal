@@ -552,6 +552,19 @@ class HybridBridgeService {
     }
   };
 
+  const parseUserinfoObject = (value) => {
+    const parsed = parseJsonLikePayload(value);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed;
+    }
+    return {};
+  };
+
+  const syncBbgrxxFromUserinfo = (value) => {
+    const parsed = parseUserinfoObject(value);
+    return syncBbgrxx(parsed);
+  };
+
   const resolveRequestUrl = (url, { prependOrigin = false } = {}) => {
     if (typeof url !== 'string' || !url.trim()) {
       return '';
@@ -872,6 +885,7 @@ class HybridBridgeService {
     }),
     getUserinfo: createSyncBridgeMethod('getUserinfo', (callbackName) => {
       const envelope = buildUserinfoEnvelope();
+      syncBbgrxxFromUserinfo(envelope.userinfo);
       if (typeof callbackName === 'string' && callbackName.trim()) {
         invokeGlobalBridgeCallback(callbackName, envelope, 'getUserinfo');
         return undefined;
@@ -966,10 +980,12 @@ class HybridBridgeService {
     applyStorage(window.localStorage, runtime.storageSeed);
     applyStorage(window.sessionStorage, runtime.storageSeed);
     syncBbgrxx(runtime.bbgrxx || {});
+    syncBbgrxxFromUserinfo(runtime.userInfoJson || runtime.userInfo || {});
     return runtime;
   };
 
   window.__bbtotalSyncBbgrxx = syncBbgrxx;
+  window.__bbtotalSyncBbgrxxFromUserinfo = syncBbgrxxFromUserinfo;
 
   const installMobileUtilsPatch = () => {
     const utils = window.ptPublicMethodMobileUtils;
@@ -987,25 +1003,9 @@ class HybridBridgeService {
     utils.getUserMsgMobile = async function (...args) {
       const result = await original(...args);
       try {
-        let parsedUserinfo = {};
         const originalUserinfo =
           result && typeof result === 'object' ? result.userinfo : undefined;
-        if (typeof originalUserinfo === 'string' && originalUserinfo.trim()) {
-          try {
-            const decoded = JSON.parse(originalUserinfo);
-            if (decoded && typeof decoded === 'object' && !Array.isArray(decoded)) {
-              parsedUserinfo = decoded;
-            }
-          } catch (_) {}
-        } else if (
-          originalUserinfo &&
-          typeof originalUserinfo === 'object' &&
-          !Array.isArray(originalUserinfo)
-        ) {
-          parsedUserinfo = originalUserinfo;
-        }
-
-        const mergedUserinfo = syncBbgrxx(parsedUserinfo);
+        const mergedUserinfo = syncBbgrxxFromUserinfo(originalUserinfo);
         if (result && typeof result === 'object' && !Array.isArray(result)) {
           if (result.userinfoRaw === undefined) {
             result.userinfoRaw = originalUserinfo;
@@ -1023,9 +1023,26 @@ class HybridBridgeService {
   };
 
   let mobileUtilsPatchAttempts = 0;
+  let lastPatchedMobileUtils = null;
+  installMobileUtilsPatch();
   const mobileUtilsPatchTimer = window.setInterval(() => {
     mobileUtilsPatchAttempts += 1;
-    if (installMobileUtilsPatch() || mobileUtilsPatchAttempts >= 40) {
+    const currentMobileUtils = window.ptPublicMethodMobileUtils;
+    if (
+      currentMobileUtils &&
+      currentMobileUtils !== lastPatchedMobileUtils &&
+      installMobileUtilsPatch()
+    ) {
+      lastPatchedMobileUtils = currentMobileUtils;
+    } else if (
+      currentMobileUtils &&
+      currentMobileUtils.__bbtotalGetUserMsgMobilePatched
+    ) {
+      lastPatchedMobileUtils = currentMobileUtils;
+    } else {
+      installMobileUtilsPatch();
+    }
+    if (mobileUtilsPatchAttempts >= 120) {
       window.clearInterval(mobileUtilsPatchTimer);
     }
   }, 250);

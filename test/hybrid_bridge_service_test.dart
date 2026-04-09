@@ -53,5 +53,11 @@ void main() {
         ),
       ),
     );
+    expect(source, contains('syncBbgrxxFromUserinfo(envelope.userinfo);'));
+    expect(
+      source,
+      contains('window.__bbtotalSyncBbgrxxFromUserinfo = syncBbgrxxFromUserinfo;'),
+    );
+    expect(source, contains('mobileUtilsPatchAttempts >= 120'));
   });
 }
