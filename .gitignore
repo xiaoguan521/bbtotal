@@ -20,6 +20,8 @@ coverage/
 .gradle/
 .gradle-user-home/
 build_logs/
+123/
+123.zip
 
 # Android
 android/.gradle/

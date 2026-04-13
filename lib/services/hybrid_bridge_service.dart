@@ -37,15 +37,13 @@ class HybridBridgeService {
   UnmodifiableListView<UserScript> buildInitialUserScripts(
     HybridRuntimeContext context,
   ) {
-    return UnmodifiableListView<UserScript>(
-      <UserScript>[
-        UserScript(
-          groupName: 'bbtotal-hybrid',
-          injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
-          source: _buildDocumentStartScript(context),
-        ),
-      ],
-    );
+    return UnmodifiableListView<UserScript>(<UserScript>[
+      UserScript(
+        groupName: 'bbtotal-hybrid',
+        injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
+        source: _buildDocumentStartScript(context),
+      ),
+    ]);
   }
 
   void registerHandlers({
@@ -58,7 +56,9 @@ class HybridBridgeService {
     controller.addJavaScriptHandler(
       handlerName: 'nativeLog',
       callback: (List<dynamic> arguments) {
-        final String message = arguments.isEmpty ? '' : arguments.first.toString();
+        final String message = arguments.isEmpty
+            ? ''
+            : arguments.first.toString();
         onLog(message.isEmpty ? 'empty nativeLog payload' : message);
         return null;
       },
@@ -67,7 +67,9 @@ class HybridBridgeService {
     controller.addJavaScriptHandler(
       handlerName: 'nativePostMessage',
       callback: (List<dynamic> arguments) {
-        final String payload = arguments.isEmpty ? '' : arguments.first.toString();
+        final String payload = arguments.isEmpty
+            ? ''
+            : arguments.first.toString();
         onPostMessage(payload);
         return null;
       },
@@ -304,8 +306,14 @@ class HybridBridgeService {
     return normalized;
   };
 
-  applyStorage(window.localStorage, runtime.storageSeed);
-  applyStorage(window.sessionStorage, runtime.storageSeed);
+  applyStorage(
+    window.localStorage,
+    runtime.pageStorageSeed || runtime.storageSeed,
+  );
+  applyStorage(
+    window.sessionStorage,
+    runtime.pageStorageSeed || runtime.storageSeed,
+  );
 
   try {
     syncBbgrxx(runtime.bbgrxx || {});

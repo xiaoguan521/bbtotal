@@ -80,9 +80,7 @@ class _HybridCheckInPageState extends State<HybridCheckInPage> {
     });
   }
 
-  Future<UserLoginInfo?> _ensureUserContext({
-    bool forceRefresh = false,
-  }) async {
+  Future<UserLoginInfo?> _ensureUserContext({bool forceRefresh = false}) async {
     final String username = _usernameController.text.trim();
     if (username.isEmpty) {
       _showMessage('请先输入姓名。');
@@ -101,8 +99,8 @@ class _HybridCheckInPageState extends State<HybridCheckInPage> {
     });
 
     try {
-      final UserLoginInfo loginInfo =
-          await _userLoginInfoService.fetchMobileLoginInfo(username);
+      final UserLoginInfo loginInfo = await _userLoginInfoService
+          .fetchMobileLoginInfo(username);
       final List<CheckInHistoryLocation> historyLocations =
           await _checkInHistoryService.fetchRecentLocations(loginInfo);
 
@@ -114,8 +112,9 @@ class _HybridCheckInPageState extends State<HybridCheckInPage> {
         _loginInfo = loginInfo;
         _resolvedUsername = username;
         _historyLocations = historyLocations;
-        _selectedHistoryKey =
-            historyLocations.isEmpty ? null : historyLocations.first.uniqueKey;
+        _selectedHistoryKey = historyLocations.isEmpty
+            ? null
+            : historyLocations.first.uniqueKey;
         _preparedPreset = null;
       });
 
@@ -166,7 +165,9 @@ class _HybridCheckInPageState extends State<HybridCheckInPage> {
     }
 
     try {
-      final ChequeInfo chequeInfo = await _chequeService.fetchCheque(basePreset);
+      final ChequeInfo chequeInfo = await _chequeService.fetchCheque(
+        basePreset,
+      );
       final CheckInLocationPreset preparedPreset = basePreset.copyWith(
         cheque: chequeInfo.cheque,
         ticket: chequeInfo.ticket,
@@ -224,17 +225,15 @@ class _HybridCheckInPageState extends State<HybridCheckInPage> {
         return;
       }
 
-      final CheckInLocationPreset? preset = await _ensurePreparedPreset(loginInfo);
+      final CheckInLocationPreset? preset = await _ensurePreparedPreset(
+        loginInfo,
+      );
       if (!mounted || preset == null) {
         return;
       }
 
       final String url = _workflowService.buildInitiatePageUrl(loginInfo);
-      _navigateToWebView(
-        rawUrl: url,
-        preset: preset,
-        title: '主动发起',
-      );
+      _navigateToWebView(rawUrl: url, preset: preset, title: '主动发起');
     } finally {
       if (mounted) {
         setState(() {
@@ -255,7 +254,9 @@ class _HybridCheckInPageState extends State<HybridCheckInPage> {
         return;
       }
 
-      final CheckInLocationPreset? preset = await _ensurePreparedPreset(loginInfo);
+      final CheckInLocationPreset? preset = await _ensurePreparedPreset(
+        loginInfo,
+      );
       if (!mounted || preset == null) {
         return;
       }
@@ -277,10 +278,13 @@ class _HybridCheckInPageState extends State<HybridCheckInPage> {
         todo: matchedTodo,
         cheque: preset.cheque,
       );
+      final Map<String, dynamic> launchPayload = _workflowService
+          .buildApprovalLaunchPayload(todo: matchedTodo);
       _navigateToWebView(
         rawUrl: url,
         preset: preset,
         title: '待办处理',
+        launchPayload: launchPayload,
       );
     } on PendingTodoServiceException catch (error) {
       _showMessage(error.message);
@@ -303,9 +307,8 @@ class _HybridCheckInPageState extends State<HybridCheckInPage> {
     for (final int ywzt in HybridWorkflowService.pendingQueryOrder) {
       final Map<String, dynamic> payload = await _pendingTodoService
           .fetchPendingTodos(loginInfo, ywzt: ywzt);
-      final List<Map<String, dynamic>> items = _workflowService.extractTodoItems(
-        payload,
-      );
+      final List<Map<String, dynamic>> items = _workflowService
+          .extractTodoItems(payload);
       final Map<String, dynamic>? matched = _workflowService.pickCheckInTodo(
         items,
       );
@@ -321,20 +324,21 @@ class _HybridCheckInPageState extends State<HybridCheckInPage> {
     required String rawUrl,
     required CheckInLocationPreset preset,
     required String title,
+    Map<String, dynamic>? launchPayload,
   }) {
     try {
-      final HybridRuntimeContext runtimeContext = HybridRuntimeContext.fromInputs(
-        baseUrl: rawUrl,
-        loginInfo: _loginInfo,
-        preset: preset,
-      );
+      final HybridRuntimeContext runtimeContext =
+          HybridRuntimeContext.fromInputs(
+            baseUrl: rawUrl,
+            loginInfo: _loginInfo,
+            preset: preset,
+            launchPayload: launchPayload,
+          );
 
       Navigator.of(context).push(
         MaterialPageRoute<void>(
-          builder: (BuildContext context) => HybridWebViewPage(
-            runtimeContext: runtimeContext,
-            title: title,
-          ),
+          builder: (BuildContext context) =>
+              HybridWebViewPage(runtimeContext: runtimeContext, title: title),
         ),
       );
     } catch (error) {
@@ -393,7 +397,8 @@ class _HybridCheckInPageState extends State<HybridCheckInPage> {
 
   @override
   Widget build(BuildContext context) {
-    final CheckInHistoryLocation? selectedHistoryLocation = _selectedHistoryLocation;
+    final CheckInHistoryLocation? selectedHistoryLocation =
+        _selectedHistoryLocation;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF2F2F7),
@@ -418,7 +423,8 @@ class _HybridCheckInPageState extends State<HybridCheckInPage> {
                       enabled: !_isBusy,
                       textInputAction: TextInputAction.done,
                       onChanged: _handleUsernameChanged,
-                      onSubmitted: (_) => _ensureUserContext(forceRefresh: true),
+                      onSubmitted: (_) =>
+                          _ensureUserContext(forceRefresh: true),
                       decoration: InputDecoration(
                         hintText: '输入姓名后按回车自动加载',
                         border: InputBorder.none,
@@ -450,9 +456,7 @@ class _HybridCheckInPageState extends State<HybridCheckInPage> {
             const _SectionLabel('最近 5 次打卡位置'),
             const SizedBox(height: 8),
             if (_usernameController.text.trim().isEmpty)
-              const _HintPanel(
-                message: '先输入姓名，再从最近的打卡位置里选一个作为本次桥接定位。',
-              )
+              const _HintPanel(message: '先输入姓名，再从最近的打卡位置里选一个作为本次桥接定位。')
             else if (_isPreparingUserContext)
               const _HintPanel(message: '正在查询最近打卡位置...')
             else if (_historyLocations.isEmpty)
@@ -464,7 +468,9 @@ class _HybridCheckInPageState extends State<HybridCheckInPage> {
             else
               _IosSection(
                 child: Column(
-                  children: _historyLocations.map((CheckInHistoryLocation item) {
+                  children: _historyLocations.map((
+                    CheckInHistoryLocation item,
+                  ) {
                     final bool selected =
                         item.uniqueKey == selectedHistoryLocation?.uniqueKey;
                     final bool isLast = identical(item, _historyLocations.last);
@@ -511,7 +517,8 @@ class _HybridCheckInPageState extends State<HybridCheckInPage> {
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: <Widget>[
                                       Text(
                                         item.address,
@@ -537,7 +544,9 @@ class _HybridCheckInPageState extends State<HybridCheckInPage> {
                                           color: Color(0xFF6E6E73),
                                         ),
                                       ),
-                                      if (item.deviceName.isNotEmpty) ...<Widget>[
+                                      if (item
+                                          .deviceName
+                                          .isNotEmpty) ...<Widget>[
                                         const SizedBox(height: 2),
                                         Text(
                                           item.deviceName,
@@ -611,10 +620,7 @@ class _HintPanel extends StatelessWidget {
 }
 
 class _IosHeroHeader extends StatelessWidget {
-  const _IosHeroHeader({
-    required this.title,
-    required this.subtitle,
-  });
+  const _IosHeroHeader({required this.title, required this.subtitle});
 
   final String title;
   final String subtitle;
@@ -716,10 +722,7 @@ class _IosInputRow extends StatelessWidget {
 }
 
 class _InfoPill extends StatelessWidget {
-  const _InfoPill({
-    required this.title,
-    required this.subtitle,
-  });
+  const _InfoPill({required this.title, required this.subtitle});
 
   final String title;
   final String subtitle;
@@ -747,10 +750,7 @@ class _InfoPill extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             subtitle,
-            style: const TextStyle(
-              fontSize: 12,
-              color: Color(0xFF6E6E73),
-            ),
+            style: const TextStyle(fontSize: 12, color: Color(0xFF6E6E73)),
           ),
         ],
       ),
@@ -775,8 +775,9 @@ class _ActionButton extends StatelessWidget {
     final Color backgroundColor = filled
         ? (enabled ? const Color(0xFF0A84FF) : const Color(0x660A84FF))
         : (enabled ? Colors.white : const Color(0xFFF0F0F3));
-    final Color foregroundColor =
-        filled ? Colors.white : const Color(0xFF111111);
+    final Color foregroundColor = filled
+        ? Colors.white
+        : const Color(0xFF111111);
 
     return SizedBox(
       width: double.infinity,
@@ -789,9 +790,7 @@ class _ActionButton extends StatelessWidget {
           decoration: BoxDecoration(
             color: backgroundColor,
             borderRadius: BorderRadius.circular(20),
-            border: filled
-                ? null
-                : Border.all(color: const Color(0xFFE5E5EA)),
+            border: filled ? null : Border.all(color: const Color(0xFFE5E5EA)),
             boxShadow: filled
                 ? const <BoxShadow>[
                     BoxShadow(

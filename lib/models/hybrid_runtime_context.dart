@@ -50,8 +50,13 @@ class HybridRuntimeContext {
   String get userInfoJson => jsonEncode(userInfoObject);
   String get launchPayloadJson => jsonEncode(launchPayload);
   String get pageParamsJson => jsonEncode(pageParams);
-  String get pageParams2Json => launchPayload.isEmpty ? '{}' : launchPayloadJson;
+  String get pageParams2Json =>
+      launchPayload.isEmpty ? '{}' : launchPayloadJson;
   String get bbgrxxJson => jsonEncode(bbgrxx);
+  Map<String, String> get pageStorageSeed => <String, String>{
+    ...storageSeed,
+    ..._buildLaunchStorageSeed(launchPayload),
+  };
 
   Map<String, dynamic> get locationPayload {
     if (preset != null) {
@@ -65,35 +70,35 @@ class HybridRuntimeContext {
   }
 
   Map<String, dynamic> get wifiInfo => <String, dynamic>{
-        'ssid': '',
-        'bssid': '',
-        'wifiName': '',
-        'wifiMac': '',
-        'isWifi': false,
-        'device': 'flutter_inappwebview',
-      };
+    'ssid': '',
+    'bssid': '',
+    'wifiName': '',
+    'wifiMac': '',
+    'isWifi': false,
+    'device': 'flutter_inappwebview',
+  };
 
   Map<String, dynamic> get bridgeContext => <String, dynamic>{
-        'loginToken': loginInfo?.loginToken ?? '',
-        'tyLoginToken': loginInfo?.loginToken ?? '',
-        'username': loginInfo?.username ?? '',
-        'userid': loginInfo?.userId.toString() ?? '',
-        'grbh': loginInfo?.grbh ?? '',
-        'idCard': loginInfo?.idCard ?? '',
-        'blqd': loginInfo?.blqd ?? '',
-        'jgbh': loginInfo?.jgbh ?? '',
-        'jgbm': loginInfo?.jgbm ?? '',
-        'zxbm': loginInfo?.zxbm ?? '',
-        'qycode': loginInfo?.qycode ?? '',
-        'zzjgdmz': loginInfo?.zzjgdmz ?? '',
-        'ticket': preset?.ticket ?? loginInfo?.ticket ?? '',
-        'cheque': preset?.cheque ?? '',
-        'cpbs': 'gjj',
-        'deviceuuid': preset?.deviceIdentifier ?? '',
-        'dx_29_sbsbm': preset?.deviceIdentifier ?? '',
-        'sbsbm': preset?.deviceIdentifier ?? '',
-        'deviceId': preset?.deviceIdentifier ?? '',
-      };
+    'loginToken': loginInfo?.loginToken ?? '',
+    'tyLoginToken': loginInfo?.loginToken ?? '',
+    'username': loginInfo?.username ?? '',
+    'userid': loginInfo?.userId.toString() ?? '',
+    'grbh': loginInfo?.grbh ?? '',
+    'idCard': loginInfo?.idCard ?? '',
+    'blqd': loginInfo?.blqd ?? '',
+    'jgbh': loginInfo?.jgbh ?? '',
+    'jgbm': loginInfo?.jgbm ?? '',
+    'zxbm': loginInfo?.zxbm ?? '',
+    'qycode': loginInfo?.qycode ?? '',
+    'zzjgdmz': loginInfo?.zzjgdmz ?? '',
+    'ticket': preset?.ticket ?? loginInfo?.ticket ?? '',
+    'cheque': preset?.cheque ?? '',
+    'cpbs': 'gjj',
+    'deviceuuid': preset?.deviceIdentifier ?? '',
+    'dx_29_sbsbm': preset?.deviceIdentifier ?? '',
+    'sbsbm': preset?.deviceIdentifier ?? '',
+    'deviceId': preset?.deviceIdentifier ?? '',
+  };
 
   Map<String, dynamic> get pageParams {
     final Map<String, dynamic> params = <String, dynamic>{
@@ -119,7 +124,8 @@ class HybridRuntimeContext {
       'locationMsg': locationPayload,
     };
 
-    if (params['zzjgxx'] == null && loginInfo?.rawZzjgxxJson.isNotEmpty == true) {
+    if (params['zzjgxx'] == null &&
+        loginInfo?.rawZzjgxxJson.isNotEmpty == true) {
       params['zzjgxx'] = _decodeJsonMap(loginInfo!.rawZzjgxxJson);
     }
 
@@ -141,15 +147,18 @@ class HybridRuntimeContext {
       return <String, String>{};
     }
 
-    final String orgNo =
-        loginInfo!.zxbm.isNotEmpty ? loginInfo!.zxbm : loginInfo!.jgbh;
+    final String orgNo = loginInfo!.zxbm.isNotEmpty
+        ? loginInfo!.zxbm
+        : loginInfo!.jgbh;
     final String orgCode = loginInfo!.zzjgdmz.isNotEmpty
         ? loginInfo!.zzjgdmz
         : loginInfo!.qycode;
 
     return <String, String>{
-      if (loginInfo!.loginToken.isNotEmpty) 'login-token': loginInfo!.loginToken,
-      if (loginInfo!.loginToken.isNotEmpty) 'tyLoginToken': loginInfo!.loginToken,
+      if (loginInfo!.loginToken.isNotEmpty)
+        'login-token': loginInfo!.loginToken,
+      if (loginInfo!.loginToken.isNotEmpty)
+        'tyLoginToken': loginInfo!.loginToken,
       if (loginInfo!.blqd.isNotEmpty) 'channel': loginInfo!.blqd,
       if (loginInfo!.blqd.isNotEmpty) 'blqd': loginInfo!.blqd,
       if (orgNo.isNotEmpty) 'jgbh': orgNo,
@@ -159,25 +168,25 @@ class HybridRuntimeContext {
   }
 
   Map<String, String> get storageSeed => <String, String>{
-        if ((loginInfo?.loginToken ?? '').isNotEmpty)
-          'loginToken': loginInfo!.loginToken,
-        if ((loginInfo?.loginToken ?? '').isNotEmpty)
-          'tyLoginToken': loginInfo!.loginToken,
-        if ((loginInfo?.blqd ?? '').isNotEmpty) 'blqd': loginInfo!.blqd,
-        if (loginInfo != null) 'userid': loginInfo!.userId.toString(),
-        if ((preset?.ticket ?? loginInfo?.ticket ?? '').isNotEmpty)
-          'ticket': preset?.ticket ?? loginInfo?.ticket ?? '',
-        if ((preset?.cheque ?? '').isNotEmpty) 'cheque': preset!.cheque,
-        if ((preset?.deviceIdentifier ?? '').isNotEmpty)
-          'dx_29_sbsbm': preset!.deviceIdentifier,
-        if ((preset?.deviceIdentifier ?? '').isNotEmpty)
-          'sbsbm': preset!.deviceIdentifier,
-        if ((preset?.deviceIdentifier ?? '').isNotEmpty)
-          'deviceId': preset!.deviceIdentifier,
-        if (userInfoObject.isNotEmpty) 'userinfo': userInfoJson,
-        if (pageParams.isNotEmpty) 'params': pageParamsJson,
-        if (launchPayload.isNotEmpty) 'params2': launchPayloadJson,
-      };
+    if ((loginInfo?.loginToken ?? '').isNotEmpty)
+      'loginToken': loginInfo!.loginToken,
+    if ((loginInfo?.loginToken ?? '').isNotEmpty)
+      'tyLoginToken': loginInfo!.loginToken,
+    if ((loginInfo?.blqd ?? '').isNotEmpty) 'blqd': loginInfo!.blqd,
+    if (loginInfo != null) 'userid': loginInfo!.userId.toString(),
+    if ((preset?.ticket ?? loginInfo?.ticket ?? '').isNotEmpty)
+      'ticket': preset?.ticket ?? loginInfo?.ticket ?? '',
+    if ((preset?.cheque ?? '').isNotEmpty) 'cheque': preset!.cheque,
+    if ((preset?.deviceIdentifier ?? '').isNotEmpty)
+      'dx_29_sbsbm': preset!.deviceIdentifier,
+    if ((preset?.deviceIdentifier ?? '').isNotEmpty)
+      'sbsbm': preset!.deviceIdentifier,
+    if ((preset?.deviceIdentifier ?? '').isNotEmpty)
+      'deviceId': preset!.deviceIdentifier,
+    if (userInfoObject.isNotEmpty) 'userinfo': userInfoJson,
+    if (pageParams.isNotEmpty) 'params': pageParamsJson,
+    if (launchPayload.isNotEmpty) 'params2': launchPayloadJson,
+  };
 
   List<HybridCookieSeed> get cookieSeeds => storageSeed.entries
       .map(
@@ -190,24 +199,25 @@ class HybridRuntimeContext {
       .toList();
 
   Map<String, dynamic> toScriptRuntime() => <String, dynamic>{
-        'origin': origin,
-        'host': resolvedUri.host,
-        'resolvedUrl': resolvedUri.toString(),
-        'bridgeContext': bridgeContext,
-        'authHeaders': authHeaders,
-        'storageSeed': storageSeed,
-        'userInfo': userInfoObject,
-        'userInfoJson': userInfoJson,
-        'bbgrxx': bbgrxx,
-        'bbgrxxJson': bbgrxxJson,
-        'pageParams': pageParams,
-        'pageParamsJson': pageParamsJson,
-        'launchPayload': launchPayload,
-        'launchPayloadJson': launchPayloadJson,
-        'pageParams2Json': pageParams2Json,
-        'locationPayload': locationPayload,
-        'wifiInfo': wifiInfo,
-      };
+    'origin': origin,
+    'host': resolvedUri.host,
+    'resolvedUrl': resolvedUri.toString(),
+    'bridgeContext': bridgeContext,
+    'authHeaders': authHeaders,
+    'storageSeed': storageSeed,
+    'pageStorageSeed': pageStorageSeed,
+    'userInfo': userInfoObject,
+    'userInfoJson': userInfoJson,
+    'bbgrxx': bbgrxx,
+    'bbgrxxJson': bbgrxxJson,
+    'pageParams': pageParams,
+    'pageParamsJson': pageParamsJson,
+    'launchPayload': launchPayload,
+    'launchPayloadJson': launchPayloadJson,
+    'pageParams2Json': pageParams2Json,
+    'locationPayload': locationPayload,
+    'wifiInfo': wifiInfo,
+  };
 
   static Map<String, dynamic> _buildUserInfoObject(
     UserLoginInfo? loginInfo,
@@ -242,7 +252,9 @@ class HybridRuntimeContext {
       'qycode': raw['qycode'] ?? loginInfo.qycode,
       'zzjgdmz': raw['zzjgdmz'] ?? loginInfo.zzjgdmz,
       'ticket': raw['ticket'] ?? loginInfo.ticket,
-      'client': raw['client'] ?? (loginInfo.client.isNotEmpty ? loginInfo.client : '4'),
+      'client':
+          raw['client'] ??
+          (loginInfo.client.isNotEmpty ? loginInfo.client : '4'),
       'isWifi': raw['isWifi'] ?? false,
       'wifiName': raw['wifiName'] ?? '',
       'wifiMac': raw['wifiMac'] ?? '',
@@ -279,6 +291,38 @@ class HybridRuntimeContext {
     } catch (_) {}
 
     return <String, dynamic>{};
+  }
+
+  static Map<String, String> _buildLaunchStorageSeed(
+    Map<String, dynamic> launchPayload,
+  ) {
+    const Set<String> allowedKeys = <String>{
+      'bpmid',
+      'businessKey',
+      'processKey',
+      'taskid',
+      'taskId',
+      'flowtype',
+      'newdaiban',
+      'nodeType',
+      'taskDefinitionKey',
+      'processInstanceId',
+      'processDefinitionId',
+      'taskName',
+    };
+
+    final Map<String, String> seed = <String, String>{};
+    for (final MapEntry<String, dynamic> entry in launchPayload.entries) {
+      if (!allowedKeys.contains(entry.key)) {
+        continue;
+      }
+      final String value = (entry.value ?? '').toString();
+      if (value.isEmpty) {
+        continue;
+      }
+      seed[entry.key] = value;
+    }
+    return seed;
   }
 }
 

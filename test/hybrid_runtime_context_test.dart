@@ -53,9 +53,55 @@ void main() {
     expect(context.userInfoObject['deviceuuid'], 'device-123');
     expect(context.userInfoObject['locationMsg'], contains('"errorCode":0'));
     expect(context.userInfoObject['client'], '4');
-    expect(context.toScriptRuntime()['launchPayload'], isA<Map<String, dynamic>>());
-    expect(context.toScriptRuntime()['launchPayloadJson'], contains('"push":"1"'));
-    expect(context.toScriptRuntime()['pageParamsJson'], contains('"deviceuuid":"device-123"'));
-    expect(context.toScriptRuntime()['bbgrxxJson'], contains('"deviceuuid":"device-123"'));
+    expect(
+      context.toScriptRuntime()['launchPayload'],
+      isA<Map<String, dynamic>>(),
+    );
+    expect(
+      context.toScriptRuntime()['launchPayloadJson'],
+      contains('"push":"1"'),
+    );
+    expect(
+      context.toScriptRuntime()['pageParamsJson'],
+      contains('"deviceuuid":"device-123"'),
+    );
+    expect(
+      context.toScriptRuntime()['bbgrxxJson'],
+      contains('"deviceuuid":"device-123"'),
+    );
   });
+
+  test(
+    'approval launch payload is exposed to page storage without becoming cookies',
+    () {
+      final HybridRuntimeContext context = HybridRuntimeContext.fromInputs(
+        baseUrl: 'https://appsy.jbysoft.com/example/#/page/index',
+        loginInfo: loginInfo,
+        preset: preset,
+        launchPayload: const <String, dynamic>{
+          'bpmid': '1012789848258',
+          'taskid': 'd98fca19-22b5-11f1-9a69-faaf32788154',
+          'taskId': 'd98fca19-22b5-11f1-9a69-faaf32788154',
+          'flowtype': 'db',
+          'taskDefinitionKey': 'a8137b2f6314b6',
+          'processInstanceId': '7d17cceb-2291-11f1-9a69-faaf32788154',
+        },
+      );
+
+      expect(context.storageSeed.containsKey('taskid'), isFalse);
+      expect(
+        context.pageStorageSeed['taskid'],
+        'd98fca19-22b5-11f1-9a69-faaf32788154',
+      );
+      expect(
+        context.pageStorageSeed['taskId'],
+        'd98fca19-22b5-11f1-9a69-faaf32788154',
+      );
+      expect(context.pageStorageSeed['flowtype'], 'db');
+      expect(
+        context.toScriptRuntime()['pageStorageSeed'],
+        isA<Map<String, String>>(),
+      );
+    },
+  );
 }

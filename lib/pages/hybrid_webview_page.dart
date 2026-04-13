@@ -26,8 +26,9 @@ class HybridWebViewPage extends StatefulWidget {
 class _HybridWebViewPageState extends State<HybridWebViewPage> {
   final HybridBridgeService _hybridBridgeService = const HybridBridgeService();
   final HybridDiagnosticsService _diagnostics = HybridDiagnosticsService();
-  late final Map<String, String> _appCache =
-      Map<String, String>.from(widget.runtimeContext.storageSeed);
+  late final Map<String, String> _appCache = Map<String, String>.from(
+    widget.runtimeContext.pageStorageSeed,
+  );
 
   InAppWebViewController? _webViewController;
   bool _isLoading = true;
@@ -184,11 +185,14 @@ class _HybridWebViewPageState extends State<HybridWebViewPage> {
     await _webViewController?.reload();
   }
 
-  Future<void> _deliverInitialPageData(InAppWebViewController controller) async {
+  Future<void> _deliverInitialPageData(
+    InAppWebViewController controller,
+  ) async {
     final String paramsJson = widget.runtimeContext.pageParamsJson;
     final String params2Json = widget.runtimeContext.pageParams2Json;
     Future<String> runOnce() async {
-      final String script = '''
+      final String script =
+          '''
 (() => {
   const params = ${jsonEncode(paramsJson)};
   const params2 = ${jsonEncode(params2Json)};
@@ -203,7 +207,9 @@ class _HybridWebViewPageState extends State<HybridWebViewPage> {
   return 'missing';
 })()
 ''';
-      final Object? result = await controller.evaluateJavascript(source: script);
+      final Object? result = await controller.evaluateJavascript(
+        source: script,
+      );
       return (result ?? 'null').toString();
     }
 
@@ -225,7 +231,9 @@ class _HybridWebViewPageState extends State<HybridWebViewPage> {
     String rawPayload, {
     required String source,
   }) async {
-    final _HybridNavigationTarget? target = _resolveNavigationTarget(rawPayload);
+    final _HybridNavigationTarget? target = _resolveNavigationTarget(
+      rawPayload,
+    );
     if (target == null) {
       _log('openUrl ignored ($source): empty or unrecognized payload');
       return;
@@ -259,10 +267,8 @@ class _HybridWebViewPageState extends State<HybridWebViewPage> {
     );
 
     final MaterialPageRoute<void> route = MaterialPageRoute<void>(
-      builder: (BuildContext context) => HybridWebViewPage(
-        runtimeContext: childContext,
-        title: target.title,
-      ),
+      builder: (BuildContext context) =>
+          HybridWebViewPage(runtimeContext: childContext, title: target.title),
     );
 
     if (target.replaceCurrent) {
@@ -274,7 +280,13 @@ class _HybridWebViewPageState extends State<HybridWebViewPage> {
   }
 
   bool _isEmbeddableUri(Uri uri) {
-    return <String>{'http', 'https', 'file', 'about', 'data'}.contains(uri.scheme);
+    return <String>{
+      'http',
+      'https',
+      'file',
+      'about',
+      'data',
+    }.contains(uri.scheme);
   }
 
   _HybridNavigationTarget? _resolveNavigationTarget(String rawPayload) {
@@ -285,7 +297,9 @@ class _HybridWebViewPageState extends State<HybridWebViewPage> {
 
     final Map<String, dynamic>? decoded = _decodePromptPayload(payload);
     if (decoded != null) {
-      final String? pushUrl = _firstNonEmptyString(<Object?>[decoded['pushURL']]);
+      final String? pushUrl = _firstNonEmptyString(<Object?>[
+        decoded['pushURL'],
+      ]);
       final String? embeddedUrl = _firstNonEmptyString(<Object?>[
         pushUrl,
         decoded['url'],
@@ -303,7 +317,8 @@ class _HybridWebViewPageState extends State<HybridWebViewPage> {
       return _HybridNavigationTarget(
         uri: uri,
         preferExternal: embeddedUrl == null && externalUrl != null,
-        replaceCurrent: (decoded['push']?.toString() == '1') &&
+        replaceCurrent:
+            (decoded['push']?.toString() == '1') &&
             (decoded['hidden']?.toString() == '1'),
         launchPayload: decoded,
         title:
@@ -320,10 +335,7 @@ class _HybridWebViewPageState extends State<HybridWebViewPage> {
     if (uri == null) {
       return null;
     }
-    return _HybridNavigationTarget(
-      uri: uri,
-      title: _deriveTitleFromUri(uri),
-    );
+    return _HybridNavigationTarget(uri: uri, title: _deriveTitleFromUri(uri));
   }
 
   String? _firstNonEmptyString(List<Object?> values) {
@@ -455,13 +467,10 @@ class _HybridWebViewPageState extends State<HybridWebViewPage> {
     }
 
     final String value = _appCache[key] ?? '';
-    final String callbackScript = '''
+    final String callbackScript =
+        '''
 (() => {
-  const payload = ${jsonEncode(<String, dynamic>{
-      'code': 0,
-      'getAppCache': key,
-      key: value,
-    })};
+  const payload = ${jsonEncode(<String, dynamic>{'code': 0, 'getAppCache': key, key: value})};
   if (typeof appCacheResult === 'function') {
     appCacheResult(payload);
     return;
@@ -537,7 +546,8 @@ class _HybridWebViewPageState extends State<HybridWebViewPage> {
 })()
 ''';
     } else if (remove && key != null) {
-      script = '''
+      script =
+          '''
 (() => {
   const key = ${jsonEncode(key)};
   try {
@@ -547,7 +557,8 @@ class _HybridWebViewPageState extends State<HybridWebViewPage> {
 })()
 ''';
     } else if (key != null) {
-      script = '''
+      script =
+          '''
 (() => {
   const key = ${jsonEncode(key)};
   const value = ${jsonEncode(value ?? '')};
@@ -601,8 +612,9 @@ class _HybridWebViewPageState extends State<HybridWebViewPage> {
             if (_isLoading)
               LinearProgressIndicator(
                 minHeight: 2,
-                value:
-                    _webProgress <= 0 || _webProgress >= 1 ? null : _webProgress,
+                value: _webProgress <= 0 || _webProgress >= 1
+                    ? null
+                    : _webProgress,
                 backgroundColor: const Color(0xFFE5E5EA),
                 valueColor: const AlwaysStoppedAnimation<Color>(
                   Color(0xFF0A84FF),
@@ -618,13 +630,13 @@ class _HybridWebViewPageState extends State<HybridWebViewPage> {
                   supportMultipleWindows: true,
                   useShouldOverrideUrlLoading: true,
                 ),
-                initialUserScripts:
-                    _hybridBridgeService.buildInitialUserScripts(
-                  widget.runtimeContext,
-                ),
+                initialUserScripts: _hybridBridgeService
+                    .buildInitialUserScripts(widget.runtimeContext),
                 onWebViewCreated: _initializeWebView,
                 onLoadStart: (controller, url) {
-                  _log('loadStart: ${url ?? widget.runtimeContext.resolvedUri}');
+                  _log(
+                    'loadStart: ${url ?? widget.runtimeContext.resolvedUri}',
+                  );
                   if (!mounted) {
                     return;
                   }

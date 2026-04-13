@@ -30,10 +30,15 @@ void main() {
       },
     ];
 
-    final Map<String, dynamic>? matched = workflowService.pickCheckInTodo(items);
+    final Map<String, dynamic>? matched = workflowService.pickCheckInTodo(
+      items,
+    );
 
     expect(matched, isNotNull);
-    expect((matched!['ggxx'] as Map<String, dynamic>)['zdyRwmc'], contains('打卡'));
+    expect(
+      (matched!['ggxx'] as Map<String, dynamic>)['zdyRwmc'],
+      contains('打卡'),
+    );
   });
 
   test('buildInitiatePageUrl carries fixed workflow params', () {
@@ -74,12 +79,52 @@ void main() {
     expect(fragmentUri.path, '/dxslglComp/dxslglsp/index');
     expect(fragmentUri.queryParameters['businessKey'], '1012789848258');
     expect(fragmentUri.queryParameters['bpmid'], '1012789848258');
-    expect(fragmentUri.queryParameters['processInstanceId'],
-        '7d17cceb-2291-11f1-9a69-faaf32788154');
+    expect(
+      fragmentUri.queryParameters['processInstanceId'],
+      '7d17cceb-2291-11f1-9a69-faaf32788154',
+    );
     expect(fragmentUri.queryParameters['taskDefinitionKey'], 'a8137b2f6314b6');
     expect(
       fragmentUri.queryParameters['processDefinitionId'],
       'k_1684813228059:17:e6c9a1a0-5c9d-11f0-ab1b-6ea4c76c13d7',
     );
+  });
+
+  test('buildApprovalLaunchPayload mirrors task context for params2', () {
+    final Map<String, dynamic> todo = <String, dynamic>{
+      'ggxx': <String, dynamic>{'bpmid': '1012789848258'},
+      'bpmxq': <String, dynamic>{
+        'businessKey': '1012789848258',
+        'processKey': 'k_1684813228059',
+        'taskName': '审批',
+        'taskId': 'd98fca19-22b5-11f1-9a69-faaf32788154',
+        'processInstanceId': '7d17cceb-2291-11f1-9a69-faaf32788154',
+        'taskDefinitionKey': 'a8137b2f6314b6',
+        'processDefinitionId':
+            'k_1684813228059:17:e6c9a1a0-5c9d-11f0-ab1b-6ea4c76c13d7',
+      },
+    };
+
+    final Map<String, dynamic> launchPayload = workflowService
+        .buildApprovalLaunchPayload(todo: todo);
+
+    expect(launchPayload['bpmid'], '1012789848258');
+    expect(launchPayload['businessKey'], '1012789848258');
+    expect(launchPayload['processKey'], 'k_1684813228059');
+    expect(launchPayload['taskid'], 'd98fca19-22b5-11f1-9a69-faaf32788154');
+    expect(launchPayload['taskId'], 'd98fca19-22b5-11f1-9a69-faaf32788154');
+    expect(launchPayload['taskDefinitionKey'], 'a8137b2f6314b6');
+    expect(
+      launchPayload['processInstanceId'],
+      '7d17cceb-2291-11f1-9a69-faaf32788154',
+    );
+    expect(
+      launchPayload['processDefinitionId'],
+      'k_1684813228059:17:e6c9a1a0-5c9d-11f0-ab1b-6ea4c76c13d7',
+    );
+    expect(launchPayload['taskName'], '审批');
+    expect(launchPayload['flowtype'], 'db');
+    expect(launchPayload['newdaiban'], 'db');
+    expect(launchPayload['nodeType'], 'check');
   });
 }

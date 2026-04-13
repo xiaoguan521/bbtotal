@@ -39,26 +39,24 @@ class HybridWorkflowService {
   }
 
   String buildInitiatePageUrl(UserLoginInfo loginInfo) {
-    final String orgNumber =
-        loginInfo.zxbm.isNotEmpty ? loginInfo.zxbm : loginInfo.jgbh;
-    return _buildHashRouteUrl(
-      initiateBaseUrl,
-      <String, String>{
-        'bm': '03060',
-        'ticket': 'nothing',
-        'cpbs': 'bbPro',
-        'ztConfig': initiateZtConfig,
-        'cysxFlag': 'false',
-        'dx_29_sjdxsl': loginInfo.userId.toString(),
-        'qycode': loginInfo.qycode,
-        'zzjgdmz': loginInfo.zzjgdmz,
-        'jgbm': loginInfo.jgbm,
-        'zxbm': orgNumber,
-        'khbh': loginInfo.grbh,
-        'userid': loginInfo.userId.toString(),
-        'zjhm': loginInfo.idCard,
-      },
-    );
+    final String orgNumber = loginInfo.zxbm.isNotEmpty
+        ? loginInfo.zxbm
+        : loginInfo.jgbh;
+    return _buildHashRouteUrl(initiateBaseUrl, <String, String>{
+      'bm': '03060',
+      'ticket': 'nothing',
+      'cpbs': 'bbPro',
+      'ztConfig': initiateZtConfig,
+      'cysxFlag': 'false',
+      'dx_29_sjdxsl': loginInfo.userId.toString(),
+      'qycode': loginInfo.qycode,
+      'zzjgdmz': loginInfo.zzjgdmz,
+      'jgbm': loginInfo.jgbm,
+      'zxbm': orgNumber,
+      'khbh': loginInfo.grbh,
+      'userid': loginInfo.userId.toString(),
+      'zjhm': loginInfo.idCard,
+    });
   }
 
   String buildApprovalPageUrl({
@@ -66,20 +64,27 @@ class HybridWorkflowService {
     required Map<String, dynamic> todo,
     required String cheque,
   }) {
-    final String orgNumber =
-        loginInfo.zxbm.isNotEmpty ? loginInfo.zxbm : loginInfo.jgbh;
+    final Map<String, dynamic> launchPayload = buildApprovalLaunchPayload(
+      todo: todo,
+    );
+    final String orgNumber = loginInfo.zxbm.isNotEmpty
+        ? loginInfo.zxbm
+        : loginInfo.jgbh;
     final Map<String, String> queryParameters = <String, String>{
-      'businessKey': _readNestedString(todo, 'bpmxq', 'businessKey'),
-      'bpmid': _readNestedString(todo, 'ggxx', 'bpmid'),
+      'businessKey': _readLaunchPayloadString(launchPayload, 'businessKey'),
+      'bpmid': _readLaunchPayloadString(launchPayload, 'bpmid'),
       'newdaiban': 'db',
       'ticket': 'nothing',
       'qycode': loginInfo.qycode,
       'ztConfig': approvalZtConfig,
-      'flowable': 'db',
-      'flowtype': 'db',
-      'processDefinitionKey': _readNestedString(todo, 'bpmxq', 'processKey'),
-      'taskName': _readNestedString(todo, 'bpmxq', 'taskName'),
-      'taskid': _readNestedString(todo, 'bpmxq', 'taskId'),
+      'flowable': _readLaunchPayloadString(launchPayload, 'flowtype'),
+      'flowtype': _readLaunchPayloadString(launchPayload, 'flowtype'),
+      'processDefinitionKey': _readLaunchPayloadString(
+        launchPayload,
+        'processKey',
+      ),
+      'taskName': _readLaunchPayloadString(launchPayload, 'taskName'),
+      'taskid': _readLaunchPayloadString(launchPayload, 'taskid'),
       'nodeType': 'check',
       'cheque': cheque,
       'zxbm': orgNumber,
@@ -93,19 +98,16 @@ class HybridWorkflowService {
       'cpbs': 'gjj',
     };
 
-    final String processInstanceId = _readNestedString(
-      todo,
-      'bpmxq',
+    final String processInstanceId = _readLaunchPayloadString(
+      launchPayload,
       'processInstanceId',
     );
-    final String taskDefinitionKey = _readNestedString(
-      todo,
-      'bpmxq',
+    final String taskDefinitionKey = _readLaunchPayloadString(
+      launchPayload,
       'taskDefinitionKey',
     );
-    final String processDefinitionId = _readNestedString(
-      todo,
-      'bpmxq',
+    final String processDefinitionId = _readLaunchPayloadString(
+      launchPayload,
       'processDefinitionId',
     );
 
@@ -122,6 +124,47 @@ class HybridWorkflowService {
     return _buildHashRouteUrl(approvalBaseUrl, queryParameters);
   }
 
+  Map<String, dynamic> buildApprovalLaunchPayload({
+    required Map<String, dynamic> todo,
+  }) {
+    final String bpmid = _readNestedString(todo, 'ggxx', 'bpmid');
+    final String businessKey = _readNestedString(todo, 'bpmxq', 'businessKey');
+    final String processKey = _readNestedString(todo, 'bpmxq', 'processKey');
+    final String taskId = _readNestedString(todo, 'bpmxq', 'taskId');
+    final String taskName = _readNestedString(todo, 'bpmxq', 'taskName');
+    final String taskDefinitionKey = _readNestedString(
+      todo,
+      'bpmxq',
+      'taskDefinitionKey',
+    );
+    final String processInstanceId = _readNestedString(
+      todo,
+      'bpmxq',
+      'processInstanceId',
+    );
+    final String processDefinitionId = _readNestedString(
+      todo,
+      'bpmxq',
+      'processDefinitionId',
+    );
+
+    return <String, dynamic>{
+      if (bpmid.isNotEmpty) 'bpmid': bpmid,
+      if (businessKey.isNotEmpty) 'businessKey': businessKey,
+      if (processKey.isNotEmpty) 'processKey': processKey,
+      if (taskId.isNotEmpty) 'taskid': taskId,
+      if (taskId.isNotEmpty) 'taskId': taskId,
+      'flowtype': 'db',
+      'newdaiban': 'db',
+      'nodeType': 'check',
+      if (taskDefinitionKey.isNotEmpty) 'taskDefinitionKey': taskDefinitionKey,
+      if (processInstanceId.isNotEmpty) 'processInstanceId': processInstanceId,
+      if (processDefinitionId.isNotEmpty)
+        'processDefinitionId': processDefinitionId,
+      if (taskName.isNotEmpty) 'taskName': taskName,
+    };
+  }
+
   String _readNestedString(
     Map<String, dynamic> payload,
     String section,
@@ -135,6 +178,10 @@ class HybridWorkflowService {
       return (group[key] ?? '').toString();
     }
     return '';
+  }
+
+  String _readLaunchPayloadString(Map<String, dynamic> payload, String key) {
+    return (payload[key] ?? '').toString();
   }
 
   String _buildHashRouteUrl(
