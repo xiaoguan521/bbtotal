@@ -136,15 +136,21 @@ That means bridge-rule updates can be shipped without reinstalling the APK, as l
 - `assets/bootstrap/remote_bridge_bundle.js`
   - embedded fallback script shipped in the APK
 - `remote-bridge/manifest.json`
-  - GitHub-hosted manifest template
+  - local template mirrored to the public remote bridge repository
 - `remote-bridge/remote_bridge_bundle.js`
-  - GitHub-hosted bridge patch template
+  - local template mirrored to the public remote bridge repository
 
-### Recommended GitHub Pages URL
+### Active Remote Repository
 
-If GitHub Pages is enabled for this repository, point the app config to:
+The app now reads the manifest from the public repository:
 
-`https://<owner>.github.io/<repo>/manifest.json`
+- Repository: [xiaoguan521/bbtotal-remote-bridge](https://github.com/xiaoguan521/bbtotal-remote-bridge)
+- Manifest: [manifest.json](https://raw.githubusercontent.com/xiaoguan521/bbtotal-remote-bridge/main/manifest.json)
+- Bundle: [remote_bridge_bundle.js](https://raw.githubusercontent.com/xiaoguan521/bbtotal-remote-bridge/main/remote_bridge_bundle.js)
+
+The current app config points to:
+
+`https://raw.githubusercontent.com/xiaoguan521/bbtotal-remote-bridge/main/manifest.json`
 
 Then update:
 
@@ -154,16 +160,22 @@ Example:
 
 ```json
 {
-  "manifestUrl": "https://example.github.io/bbtotal/manifest.json"
+  "manifestUrl": "https://raw.githubusercontent.com/xiaoguan521/bbtotal-remote-bridge/main/manifest.json"
 }
 ```
 
 ### Publish Flow
 
-1. Edit `remote-bridge/manifest.json` and `remote-bridge/remote_bridge_bundle.js`
-2. Push to `main`
-3. GitHub Actions workflow `Remote Bridge Pages` publishes the directory to GitHub Pages
-4. The app loads the new manifest on next startup
+1. Edit the files in the public repository `xiaoguan521/bbtotal-remote-bridge`
+2. Commit and push to `main`
+3. The app loads the new manifest on next startup
+
+If you want to prepare changes locally first, keep editing:
+
+- `remote-bridge/manifest.json`
+- `remote-bridge/remote_bridge_bundle.js`
+
+Then mirror those two files into the public repository before pushing.
 
 ### Manifest Format
 
