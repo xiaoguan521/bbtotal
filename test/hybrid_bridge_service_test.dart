@@ -69,6 +69,20 @@ void main() {
       source,
       contains('normalized.updatingLocationMsg = normalizeLocationPayload'),
     );
+    expect(
+      source,
+      contains(
+        'window.I = Object.assign({}, window.I || {}, bridge, compatBridge);',
+      ),
+    );
+    expect(
+      source,
+      contains(
+        'window.iapp = Object.assign({}, window.iapp || {}, iappCompat);',
+      ),
+    );
+    expect(source, contains("simei: createSyncBridgeMethod('I.simei'"));
+    expect(source, contains("fn2: createSyncBridgeMethod('iapp.fn2'"));
   });
 
   test(

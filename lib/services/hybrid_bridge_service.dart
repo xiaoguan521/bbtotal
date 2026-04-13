@@ -635,6 +635,69 @@ class HybridBridgeService {
     return {};
   };
 
+  const resolveObjectPath = (root, path) => {
+    if (typeof path !== 'string' || !path.trim()) {
+      return undefined;
+    }
+    return path.split('.').reduce((current, part) => {
+      if (!current || (typeof current !== 'object' && typeof current !== 'function')) {
+        return undefined;
+      }
+      return current[part];
+    }, root);
+  };
+
+  const assignObjectPath = (root, path, value) => {
+    if (
+      !root ||
+      (typeof root !== 'object' && typeof root !== 'function') ||
+      typeof path !== 'string' ||
+      !path.trim()
+    ) {
+      return false;
+    }
+
+    const parts = path.split('.').filter(Boolean);
+    if (!parts.length) {
+      return false;
+    }
+
+    let current = root;
+    for (let index = 0; index < parts.length - 1; index += 1) {
+      const key = parts[index];
+      if (
+        !current[key] ||
+        (typeof current[key] !== 'object' && typeof current[key] !== 'function')
+      ) {
+        current[key] = {};
+      }
+      current = current[key];
+    }
+
+    current[parts[parts.length - 1]] = value;
+    return true;
+  };
+
+  const toBridgeString = (value) => {
+    if (value == null) {
+      return '';
+    }
+    if (typeof value === 'string') {
+      return value;
+    }
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      return String(value);
+    }
+    return stringify(value);
+  };
+
+  const compatState = mergeDefined(
+    runtime.bridgeContext || {},
+    runtime.userInfo || {},
+    runtime.pageParams || {},
+    runtime.launchPayload || {},
+  );
+
   const syncBbgrxxFromUserinfo = (value) => {
     const parsed = parseUserinfoObject(value);
     return syncBbgrxx(parsed);
@@ -938,6 +1001,94 @@ class HybridBridgeService {
     };
   };
 
+  const readCompatValue = (key) => {
+    if (typeof key !== 'string' || !key.trim()) {
+      return '';
+    }
+
+    const trimmedKey = key.trim();
+    if (trimmedKey === 'userinfo') {
+      return runtime.userInfoJson || stringify(runtime.userInfo || {});
+    }
+    if (trimmedKey === 'params') {
+      return window.params || runtime.pageParamsJson || stringify(runtime.pageParams || {});
+    }
+    if (trimmedKey === 'params2') {
+      return (
+        window.params2 ||
+        runtime.launchPayloadJson ||
+        stringify(runtime.launchPayload || {})
+      );
+    }
+    if (trimmedKey === 'bbgrxx') {
+      return stringify(window.bbgrxx || runtime.bbgrxx || {});
+    }
+
+    if (Object.prototype.hasOwnProperty.call(compatState, trimmedKey)) {
+      return compatState[trimmedKey];
+    }
+
+    const nestedWindowValue = resolveObjectPath(window, trimmedKey);
+    if (nestedWindowValue !== undefined) {
+      return nestedWindowValue;
+    }
+
+    try {
+      if (window.sessionStorage) {
+        const sessionValue = window.sessionStorage.getItem(trimmedKey);
+        if (sessionValue != null) {
+          return sessionValue;
+        }
+      }
+      if (window.localStorage) {
+        const localValue = window.localStorage.getItem(trimmedKey);
+        if (localValue != null) {
+          return localValue;
+        }
+      }
+    } catch (_) {}
+
+    return '';
+  };
+
+  const writeCompatValue = (key, rawValue) => {
+    if (typeof key !== 'string' || !key.trim()) {
+      return '';
+    }
+
+    const trimmedKey = key.trim();
+    const parsedValue = parseJsonLikePayload(rawValue);
+    compatState[trimmedKey] = parsedValue;
+
+    if (trimmedKey === 'userinfo') {
+      syncBbgrxxFromUserinfo(parsedValue);
+    } else if (trimmedKey === 'bbgrxx') {
+      syncBbgrxx(parsedValue);
+    } else if (trimmedKey === 'params') {
+      window.__bbtotalPageParams = parseUserinfoObject(parsedValue);
+      window.__bbtotalPageParamsJson = toBridgeString(parsedValue);
+      window.params = window.__bbtotalPageParamsJson;
+    } else if (trimmedKey === 'params2') {
+      window.__bbtotalLaunchPayload = parseUserinfoObject(parsedValue);
+      window.__bbtotalLaunchPayloadJson = toBridgeString(parsedValue);
+      window.params2 = window.__bbtotalLaunchPayloadJson;
+    }
+
+    assignObjectPath(window, trimmedKey, parsedValue);
+
+    const storageValue = toBridgeString(parsedValue);
+    try {
+      if (window.sessionStorage) {
+        window.sessionStorage.setItem(trimmedKey, storageValue);
+      }
+      if (window.localStorage) {
+        window.localStorage.setItem(trimmedKey, storageValue);
+      }
+    } catch (_) {}
+
+    return storageValue;
+  };
+
   const bridge = {
     getToken: createSyncBridgeMethod('getToken', () => {
       return runtime.bridgeContext.loginToken || '';
@@ -1050,6 +1201,76 @@ class HybridBridgeService {
     }),
   };
 
+  const compatBridge = {
+    simei: createSyncBridgeMethod('I.simei', () => {
+      return (
+        runtime.bridgeContext.deviceuuid ||
+        runtime.bridgeContext.sbsbm ||
+        runtime.bridgeContext.dx_29_sbsbm ||
+        runtime.bridgeContext.deviceId ||
+        ''
+      );
+    }),
+    simsi: createSyncBridgeMethod('I.simsi', () => ''),
+    hs: createSyncBridgeMethod('I.hs', (command) => {
+      const action = String(command || '').trim().toLowerCase();
+      if (action === 'cookie') {
+        return document.cookie || '';
+      }
+      if (action === 'del cookie') {
+        return '';
+      }
+      return '';
+    }),
+    ss: createSyncBridgeMethod('I.ss', (...args) => {
+      if (args.length >= 2) {
+        return writeCompatValue(args[0], args[1]);
+      }
+      return toBridgeString(readCompatValue(args[0]));
+    }),
+    ssBoolean: createSyncBridgeMethod('I.ssBoolean', (key, value) => {
+      return writeCompatValue(key, !!value);
+    }),
+    ssNumber: createSyncBridgeMethod('I.ssNumber', (key, value) => {
+      return writeCompatValue(key, Number(value));
+    }),
+    ssString: createSyncBridgeMethod('I.ssString', (key, value) => {
+      return writeCompatValue(key, String(value ?? ''));
+    }),
+    src: createSyncBridgeMethod('I.src', (name, value) => {
+      const parsedValue = parseJsonLikePayload(value);
+      if (typeof name === 'string' && name.trim()) {
+        assignObjectPath(window, name.trim(), parsedValue);
+      }
+      return '';
+    }),
+  };
+
+  const iappCompat = {
+    fn: createAsyncBridgeMethod('iapp.fn', (name) => {
+      const target = resolveObjectPath(window, String(name || '').trim());
+      if (typeof target === 'function') {
+        target();
+        return '';
+      }
+      report('[iapp] fn target not found: ' + preview(name));
+      return '';
+    }),
+    fn2: createSyncBridgeMethod('iapp.fn2', (name, key) => {
+      const target = resolveObjectPath(window, String(name || '').trim());
+      if (typeof target === 'function') {
+        target();
+      }
+      return toBridgeString(readCompatValue(key));
+    }),
+    g: createSyncBridgeMethod('iapp.g', (key) => {
+      return toBridgeString(readCompatValue(key));
+    }),
+    s: createSyncBridgeMethod('iapp.s', (key, value) => {
+      return writeCompatValue(key, value);
+    }),
+  };
+
   window.__bbtotalRuntime = runtime;
   window.__bbtotalApplySession = () => {
     applyStorage(window.localStorage, runtime.storageSeed);
@@ -1128,6 +1349,8 @@ class HybridBridgeService {
   window.Android = window.SYAppModel;
   window.appModel = window.SYAppModel;
   window.AppModel = window.SYAppModel;
+  window.I = Object.assign({}, window.I || {}, bridge, compatBridge);
+  window.iapp = Object.assign({}, window.iapp || {}, iappCompat);
   window.getToken = bridge.getToken;
   window.getLoginToken = bridge.getLoginToken;
   window.getUserinfo = bridge.getUserinfo;

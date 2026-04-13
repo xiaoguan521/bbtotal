@@ -22,6 +22,8 @@ coverage/
 build_logs/
 123/
 123.zip
+456/
+456.zip
 
 # Android
 android/.gradle/
