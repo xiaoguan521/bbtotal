@@ -116,3 +116,79 @@ This repository should stay small:
 - minimal business bootstrap services
 
 No iOS target, no mock location, no custom native WebView implementation unless real device behavior forces it.
+
+## GitHub Remote Bridge
+
+The app now supports a three-level bridge bootstrap fallback:
+
+1. remote bundle from GitHub
+2. last successfully cached bundle on device
+3. embedded bundle shipped inside the APK
+
+That means bridge-rule updates can be shipped without reinstalling the APK, as long as the change stays inside the page/bootstrap layer.
+
+### Files
+
+- `assets/bootstrap/remote_bridge_config.json`
+  - stores the manifest URL used by the app at startup
+- `assets/bootstrap/remote_bridge_manifest.json`
+  - embedded fallback manifest shipped in the APK
+- `assets/bootstrap/remote_bridge_bundle.js`
+  - embedded fallback script shipped in the APK
+- `remote-bridge/manifest.json`
+  - GitHub-hosted manifest template
+- `remote-bridge/remote_bridge_bundle.js`
+  - GitHub-hosted bridge patch template
+
+### Recommended GitHub Pages URL
+
+If GitHub Pages is enabled for this repository, point the app config to:
+
+`https://<owner>.github.io/<repo>/manifest.json`
+
+Then update:
+
+- [remote_bridge_config.json](/Volumes/移动磁盘/bb/bbtotal/assets/bootstrap/remote_bridge_config.json)
+
+Example:
+
+```json
+{
+  "manifestUrl": "https://example.github.io/bbtotal/manifest.json"
+}
+```
+
+### Publish Flow
+
+1. Edit `remote-bridge/manifest.json` and `remote-bridge/remote_bridge_bundle.js`
+2. Push to `main`
+3. GitHub Actions workflow `Remote Bridge Pages` publishes the directory to GitHub Pages
+4. The app loads the new manifest on next startup
+
+### Manifest Format
+
+```json
+{
+  "version": "2026.04.13.1",
+  "scriptUrl": "remote_bridge_bundle.js"
+}
+```
+
+You can also inline the script:
+
+```json
+{
+  "version": "2026.04.13.1",
+  "script": "window.__bbtotalRemoteBridgeBundle = { version: '2026.04.13.1' };"
+}
+```
+
+### When APK Reinstall Is Still Needed
+
+Remote bridge updates do not replace native app updates. A new APK is still required when changing:
+
+- Flutter UI code
+- Android permissions
+- native plugins
+- WebView platform behavior
+- startup bootstrap code before remote loading begins
