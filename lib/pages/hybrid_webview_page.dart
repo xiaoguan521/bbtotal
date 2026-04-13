@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import '../models/hybrid_runtime_context.dart';
+import '../models/remote_bridge_bundle.dart';
 import '../services/hybrid_bridge_service.dart';
 import '../services/hybrid_diagnostics_service.dart';
 
@@ -13,11 +14,13 @@ class HybridWebViewPage extends StatefulWidget {
   const HybridWebViewPage({
     required this.runtimeContext,
     required this.title,
+    required this.remoteBridgeBundle,
     super.key,
   });
 
   final HybridRuntimeContext runtimeContext;
   final String title;
+  final RemoteBridgeBundle remoteBridgeBundle;
 
   @override
   State<HybridWebViewPage> createState() => _HybridWebViewPageState();
@@ -136,6 +139,9 @@ class _HybridWebViewPageState extends State<HybridWebViewPage> {
   Future<void> _initializeWebView(InAppWebViewController controller) async {
     _webViewController = controller;
     _log('initializeWebView start: ${widget.runtimeContext.resolvedUri}');
+    _log(
+      'remoteBridgeBundle: ${widget.remoteBridgeBundle.source} ${widget.remoteBridgeBundle.version}',
+    );
 
     try {
       _hybridBridgeService.registerHandlers(
@@ -267,8 +273,11 @@ class _HybridWebViewPageState extends State<HybridWebViewPage> {
     );
 
     final MaterialPageRoute<void> route = MaterialPageRoute<void>(
-      builder: (BuildContext context) =>
-          HybridWebViewPage(runtimeContext: childContext, title: target.title),
+      builder: (BuildContext context) => HybridWebViewPage(
+        runtimeContext: childContext,
+        title: target.title,
+        remoteBridgeBundle: widget.remoteBridgeBundle,
+      ),
     );
 
     if (target.replaceCurrent) {
@@ -631,7 +640,11 @@ class _HybridWebViewPageState extends State<HybridWebViewPage> {
                   useShouldOverrideUrlLoading: true,
                 ),
                 initialUserScripts: _hybridBridgeService
-                    .buildInitialUserScripts(widget.runtimeContext),
+                    .buildInitialUserScripts(
+                      widget.runtimeContext,
+                      extraBootstrapScript:
+                          widget.remoteBridgeBundle.scriptSource,
+                    ),
                 onWebViewCreated: _initializeWebView,
                 onLoadStart: (controller, url) {
                   _log(

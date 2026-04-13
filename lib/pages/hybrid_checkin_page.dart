@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../models/check_in_history_location.dart';
 import '../models/check_in_location_preset.dart';
 import '../models/hybrid_runtime_context.dart';
+import '../models/remote_bridge_bundle.dart';
 import '../models/user_login_info.dart';
 import '../services/check_in_history_service.dart';
 import '../services/cheque_service.dart';
@@ -15,7 +16,9 @@ import '../services/user_login_info_service.dart';
 import 'hybrid_webview_page.dart';
 
 class HybridCheckInPage extends StatefulWidget {
-  const HybridCheckInPage({super.key});
+  const HybridCheckInPage({required this.remoteBridgeBundle, super.key});
+
+  final RemoteBridgeBundle remoteBridgeBundle;
 
   @override
   State<HybridCheckInPage> createState() => _HybridCheckInPageState();
@@ -337,8 +340,11 @@ class _HybridCheckInPageState extends State<HybridCheckInPage> {
 
       Navigator.of(context).push(
         MaterialPageRoute<void>(
-          builder: (BuildContext context) =>
-              HybridWebViewPage(runtimeContext: runtimeContext, title: title),
+          builder: (BuildContext context) => HybridWebViewPage(
+            runtimeContext: runtimeContext,
+            title: title,
+            remoteBridgeBundle: widget.remoteBridgeBundle,
+          ),
         ),
       );
     } catch (error) {

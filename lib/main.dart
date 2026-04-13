@@ -2,7 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
+import 'models/remote_bridge_bundle.dart';
 import 'pages/hybrid_checkin_page.dart';
+import 'services/remote_bridge_bundle_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -11,11 +13,21 @@ Future<void> main() async {
     await InAppWebViewController.setWebContentsDebuggingEnabled(true);
   }
 
-  runApp(const BbtotalApp());
+  final RemoteBridgeBundle remoteBridgeBundle =
+      await RemoteBridgeBundleService().loadActiveBundle(
+        onLog: (String message) => debugPrint('[remote-bridge] $message'),
+      );
+
+  runApp(BbtotalApp(remoteBridgeBundle: remoteBridgeBundle));
 }
 
 class BbtotalApp extends StatelessWidget {
-  const BbtotalApp({super.key});
+  const BbtotalApp({
+    super.key,
+    this.remoteBridgeBundle = RemoteBridgeBundle.embeddedFallback,
+  });
+
+  final RemoteBridgeBundle remoteBridgeBundle;
 
   @override
   Widget build(BuildContext context) {
@@ -52,7 +64,7 @@ class BbtotalApp extends StatelessWidget {
         ),
         textTheme: Typography.blackCupertino,
       ),
-      home: const HybridCheckInPage(),
+      home: HybridCheckInPage(remoteBridgeBundle: remoteBridgeBundle),
     );
   }
 }

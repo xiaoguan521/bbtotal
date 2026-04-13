@@ -35,15 +35,28 @@ class HybridBridgeService {
   }
 
   UnmodifiableListView<UserScript> buildInitialUserScripts(
-    HybridRuntimeContext context,
-  ) {
-    return UnmodifiableListView<UserScript>(<UserScript>[
+    HybridRuntimeContext context, {
+    String extraBootstrapScript = '',
+  }) {
+    final List<UserScript> scripts = <UserScript>[
       UserScript(
         groupName: 'bbtotal-hybrid',
         injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
         source: _buildDocumentStartScript(context),
       ),
-    ]);
+    ];
+
+    if (extraBootstrapScript.trim().isNotEmpty) {
+      scripts.add(
+        UserScript(
+          groupName: 'bbtotal-hybrid-remote',
+          injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
+          source: extraBootstrapScript,
+        ),
+      );
+    }
+
+    return UnmodifiableListView<UserScript>(scripts);
   }
 
   void registerHandlers({

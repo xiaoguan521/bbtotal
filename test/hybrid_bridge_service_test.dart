@@ -56,10 +56,45 @@ void main() {
     expect(source, contains('syncBbgrxxFromUserinfo(envelope.userinfo);'));
     expect(
       source,
-      contains('window.__bbtotalSyncBbgrxxFromUserinfo = syncBbgrxxFromUserinfo;'),
+      contains(
+        'window.__bbtotalSyncBbgrxxFromUserinfo = syncBbgrxxFromUserinfo;',
+      ),
     );
     expect(source, contains('mobileUtilsPatchAttempts >= 120'));
-    expect(source, contains('normalized.locationMsg = normalizeLocationPayload'));
-    expect(source, contains('normalized.updatingLocationMsg = normalizeLocationPayload'));
+    expect(
+      source,
+      contains('normalized.locationMsg = normalizeLocationPayload'),
+    );
+    expect(
+      source,
+      contains('normalized.updatingLocationMsg = normalizeLocationPayload'),
+    );
   });
+
+  test(
+    'document start scripts include remote bootstrap override when provided',
+    () {
+      final HybridRuntimeContext context = HybridRuntimeContext.fromInputs(
+        baseUrl: 'https://appsy.jbysoft.com/example/#/page/index',
+        loginInfo: loginInfo,
+        preset: preset,
+      );
+
+      const HybridBridgeService service = HybridBridgeService();
+      final scripts = service.buildInitialUserScripts(
+        context,
+        extraBootstrapScript: 'window.__remoteBridgeLoaded = true;',
+      );
+
+      expect(scripts, hasLength(2));
+      expect(
+        scripts.first.source,
+        contains('window.__bbtotalRuntime = runtime;'),
+      );
+      expect(
+        scripts.last.source,
+        contains('window.__remoteBridgeLoaded = true;'),
+      );
+    },
+  );
 }
