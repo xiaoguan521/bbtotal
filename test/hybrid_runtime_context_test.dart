@@ -80,6 +80,7 @@ void main() {
         preset: preset,
         launchPayload: const <String, dynamic>{
           'bpmid': '1012789848258',
+          'bpmparam': '{"taskId":"d98fca19-22b5-11f1-9a69-faaf32788154"}',
           'taskid': 'd98fca19-22b5-11f1-9a69-faaf32788154',
           'taskId': 'd98fca19-22b5-11f1-9a69-faaf32788154',
           'flowtype': 'db',
@@ -98,6 +99,22 @@ void main() {
         'd98fca19-22b5-11f1-9a69-faaf32788154',
       );
       expect(context.pageStorageSeed['flowtype'], 'db');
+      expect(
+        context.userInfoObject['taskid'],
+        'd98fca19-22b5-11f1-9a69-faaf32788154',
+      );
+      expect(
+        context.userInfoObject['taskId'],
+        'd98fca19-22b5-11f1-9a69-faaf32788154',
+      );
+      expect(
+        context.userInfoObject['bpmparam'],
+        '{"taskId":"d98fca19-22b5-11f1-9a69-faaf32788154"}',
+      );
+      expect(
+        context.pageParams['taskid'],
+        'd98fca19-22b5-11f1-9a69-faaf32788154',
+      );
       expect(
         context.toScriptRuntime()['pageStorageSeed'],
         isA<Map<String, String>>(),

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../models/user_login_info.dart';
 
 class HybridWorkflowService {
@@ -152,6 +154,7 @@ class HybridWorkflowService {
       if (bpmid.isNotEmpty) 'bpmid': bpmid,
       if (businessKey.isNotEmpty) 'businessKey': businessKey,
       if (processKey.isNotEmpty) 'processKey': processKey,
+      'bpmparam': jsonEncode(todo),
       if (taskId.isNotEmpty) 'taskid': taskId,
       if (taskId.isNotEmpty) 'taskId': taskId,
       'flowtype': 'db',

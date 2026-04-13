@@ -28,7 +28,11 @@ class HybridRuntimeContext {
       resolvedUri: resolvedUri,
       loginInfo: loginInfo,
       preset: preset,
-      userInfoObject: _buildUserInfoObject(loginInfo, preset),
+      userInfoObject: _buildUserInfoObject(
+        loginInfo,
+        preset,
+        launchPayload ?? const <String, dynamic>{},
+      ),
       launchPayload: launchPayload == null
           ? const <String, dynamic>{}
           : Map<String, dynamic>.unmodifiable(launchPayload),
@@ -222,6 +226,7 @@ class HybridRuntimeContext {
   static Map<String, dynamic> _buildUserInfoObject(
     UserLoginInfo? loginInfo,
     CheckInLocationPreset? preset,
+    Map<String, dynamic> launchPayload,
   ) {
     if (loginInfo == null) {
       return <String, dynamic>{};
@@ -229,6 +234,9 @@ class HybridRuntimeContext {
 
     final Map<String, dynamic> raw = _decodeJsonMap(loginInfo.rawUserInfoJson);
     final String deviceIdentifier = preset?.deviceIdentifier ?? '';
+    final Map<String, dynamic> workflowFields = _buildWorkflowContextFields(
+      launchPayload,
+    );
     final Map<String, dynamic> locationPayload =
         preset?.toBridgePayload() ??
         const <String, dynamic>{
@@ -262,6 +270,7 @@ class HybridRuntimeContext {
       'locationMsg': raw['locationMsg'] ?? jsonEncode(locationPayload),
       'updatingLocationMsg':
           raw['updatingLocationMsg'] ?? jsonEncode(locationPayload),
+      ...workflowFields,
       if (deviceIdentifier.isNotEmpty)
         'deviceuuid': raw['deviceuuid'] ?? deviceIdentifier,
       if (deviceIdentifier.isNotEmpty)
@@ -300,6 +309,7 @@ class HybridRuntimeContext {
       'bpmid',
       'businessKey',
       'processKey',
+      'bpmparam',
       'taskid',
       'taskId',
       'flowtype',
@@ -323,6 +333,43 @@ class HybridRuntimeContext {
       seed[entry.key] = value;
     }
     return seed;
+  }
+
+  static Map<String, dynamic> _buildWorkflowContextFields(
+    Map<String, dynamic> launchPayload,
+  ) {
+    const Set<String> allowedKeys = <String>{
+      'bpmid',
+      'businessKey',
+      'processKey',
+      'bpmparam',
+      'taskid',
+      'taskId',
+      'flowtype',
+      'newdaiban',
+      'nodeType',
+      'taskDefinitionKey',
+      'processInstanceId',
+      'processDefinitionId',
+      'taskName',
+    };
+
+    final Map<String, dynamic> fields = <String, dynamic>{};
+    for (final MapEntry<String, dynamic> entry in launchPayload.entries) {
+      if (!allowedKeys.contains(entry.key)) {
+        continue;
+      }
+      final dynamic value = entry.value;
+      if (value == null) {
+        continue;
+      }
+      final String text = value.toString();
+      if (text.isEmpty) {
+        continue;
+      }
+      fields[entry.key] = value;
+    }
+    return fields;
   }
 }
 

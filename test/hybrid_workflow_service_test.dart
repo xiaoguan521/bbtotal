@@ -111,6 +111,7 @@ void main() {
     expect(launchPayload['bpmid'], '1012789848258');
     expect(launchPayload['businessKey'], '1012789848258');
     expect(launchPayload['processKey'], 'k_1684813228059');
+    expect(launchPayload['bpmparam'], contains('"taskId"'));
     expect(launchPayload['taskid'], 'd98fca19-22b5-11f1-9a69-faaf32788154');
     expect(launchPayload['taskId'], 'd98fca19-22b5-11f1-9a69-faaf32788154');
     expect(launchPayload['taskDefinitionKey'], 'a8137b2f6314b6');
