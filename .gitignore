@@ -24,6 +24,7 @@ build_logs/
 123.zip
 456/
 456.zip
+bbgl/
 
 # Android
 android/.gradle/
@@ -37,3 +38,13 @@ android/*.keystore
 **/GeneratedPluginRegistrant.java
 **/GeneratedPluginRegistrant.h
 **/GeneratedPluginRegistrant.m
+456.apk
+.gitignore
+apktool.bat.txt
+apktool_3.0.1.jar
+jadx-gui-1.5.5-win.zip
+.gitignore
+贝贝管理.apk
+jadx-gui-1.5.5-win/lib/jadx-gui-1.5.5-all.jar
+jadx-gui-1.5.5-win/jadx-gui-1.5.5.exe
+111.apk

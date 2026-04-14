@@ -41,9 +41,7 @@ class HybridWorkflowService {
   }
 
   String buildInitiatePageUrl(UserLoginInfo loginInfo) {
-    final String orgNumber = loginInfo.zxbm.isNotEmpty
-        ? loginInfo.zxbm
-        : loginInfo.jgbh;
+    final String orgNumber = _resolveWorkflowOrgNumber(loginInfo);
     return _buildHashRouteUrl(initiateBaseUrl, <String, String>{
       'bm': '03060',
       'ticket': 'nothing',
@@ -53,7 +51,7 @@ class HybridWorkflowService {
       'dx_29_sjdxsl': loginInfo.userId.toString(),
       'qycode': loginInfo.qycode,
       'zzjgdmz': loginInfo.zzjgdmz,
-      'jgbm': loginInfo.jgbm,
+      'jgbm': orgNumber,
       'zxbm': orgNumber,
       'khbh': loginInfo.grbh,
       'userid': loginInfo.userId.toString(),
@@ -69,9 +67,7 @@ class HybridWorkflowService {
     final Map<String, dynamic> launchPayload = buildApprovalLaunchPayload(
       todo: todo,
     );
-    final String orgNumber = loginInfo.zxbm.isNotEmpty
-        ? loginInfo.zxbm
-        : loginInfo.jgbh;
+    final String orgNumber = _resolveWorkflowOrgNumber(loginInfo);
     final Map<String, String> queryParameters = <String, String>{
       'businessKey': _readLaunchPayloadString(launchPayload, 'businessKey'),
       'bpmid': _readLaunchPayloadString(launchPayload, 'bpmid'),
@@ -81,16 +77,17 @@ class HybridWorkflowService {
       'ztConfig': approvalZtConfig,
       'flowable': _readLaunchPayloadString(launchPayload, 'flowtype'),
       'flowtype': _readLaunchPayloadString(launchPayload, 'flowtype'),
-      'processDefinitionKey': _readLaunchPayloadString(
-        launchPayload,
-        'processKey',
-      ),
+      'processDefinitionKey':
+          _readLaunchPayloadString(launchPayload, 'processDefinitionKey')
+              .isNotEmpty
+          ? _readLaunchPayloadString(launchPayload, 'processDefinitionKey')
+          : _readLaunchPayloadString(launchPayload, 'processKey'),
       'taskName': _readLaunchPayloadString(launchPayload, 'taskName'),
       'taskid': _readLaunchPayloadString(launchPayload, 'taskid'),
       'nodeType': 'check',
       'cheque': cheque,
       'zxbm': orgNumber,
-      'jgbm': loginInfo.jgbm,
+      'jgbm': orgNumber,
       'khbh': loginInfo.grbh,
       'userid': loginInfo.userId.toString(),
       'zjhm': loginInfo.idCard,
@@ -129,31 +126,58 @@ class HybridWorkflowService {
   Map<String, dynamic> buildApprovalLaunchPayload({
     required Map<String, dynamic> todo,
   }) {
-    final String bpmid = _readNestedString(todo, 'ggxx', 'bpmid');
-    final String businessKey = _readNestedString(todo, 'bpmxq', 'businessKey');
-    final String processKey = _readNestedString(todo, 'bpmxq', 'processKey');
-    final String taskId = _readNestedString(todo, 'bpmxq', 'taskId');
-    final String taskName = _readNestedString(todo, 'bpmxq', 'taskName');
-    final String taskDefinitionKey = _readNestedString(
+    final String bpmid = _readTodoString(
       todo,
-      'bpmxq',
-      'taskDefinitionKey',
+      keys: const <String>['bpmid'],
+      sections: const <String>['ggxx', 'bpmxq'],
     );
-    final String processInstanceId = _readNestedString(
+    final String businessKey = _readTodoString(
       todo,
-      'bpmxq',
-      'processInstanceId',
+      keys: const <String>['businessKey'],
+      sections: const <String>['bpmxq', 'ggxx'],
     );
-    final String processDefinitionId = _readNestedString(
+    final String processDefinitionKey = _readTodoString(
       todo,
-      'bpmxq',
-      'processDefinitionId',
+      keys: const <String>['processDefinitionKey', 'processKey'],
+      sections: const <String>['bpmxq', 'ggxx'],
+    );
+    final String processKey = _readTodoString(
+      todo,
+      keys: const <String>['processKey', 'processDefinitionKey'],
+      sections: const <String>['bpmxq', 'ggxx'],
+    );
+    final String taskId = _readTodoString(
+      todo,
+      keys: const <String>['taskId', 'taskid'],
+      sections: const <String>['bpmxq', 'ggxx'],
+    );
+    final String taskName = _readTodoString(
+      todo,
+      keys: const <String>['taskName'],
+      sections: const <String>['bpmxq', 'ggxx'],
+    );
+    final String taskDefinitionKey = _readTodoString(
+      todo,
+      keys: const <String>['taskDefinitionKey'],
+      sections: const <String>['bpmxq', 'ggxx'],
+    );
+    final String processInstanceId = _readTodoString(
+      todo,
+      keys: const <String>['processInstanceId'],
+      sections: const <String>['bpmxq', 'ggxx'],
+    );
+    final String processDefinitionId = _readTodoString(
+      todo,
+      keys: const <String>['processDefinitionId'],
+      sections: const <String>['bpmxq', 'ggxx'],
     );
 
     return <String, dynamic>{
       if (bpmid.isNotEmpty) 'bpmid': bpmid,
       if (businessKey.isNotEmpty) 'businessKey': businessKey,
       if (processKey.isNotEmpty) 'processKey': processKey,
+      if (processDefinitionKey.isNotEmpty)
+        'processDefinitionKey': processDefinitionKey,
       'bpmparam': jsonEncode(todo),
       if (taskId.isNotEmpty) 'taskid': taskId,
       if (taskId.isNotEmpty) 'taskId': taskId,
@@ -183,8 +207,42 @@ class HybridWorkflowService {
     return '';
   }
 
+  String _readTodoString(
+    Map<String, dynamic> todo, {
+    required List<String> keys,
+    required List<String> sections,
+  }) {
+    for (final String section in sections) {
+      for (final String key in keys) {
+        final String value = _readNestedString(todo, section, key);
+        if (value.isNotEmpty) {
+          return value;
+        }
+      }
+    }
+
+    for (final String key in keys) {
+      final String value = (todo[key] ?? '').toString();
+      if (value.isNotEmpty) {
+        return value;
+      }
+    }
+
+    return '';
+  }
+
   String _readLaunchPayloadString(Map<String, dynamic> payload, String key) {
     return (payload[key] ?? '').toString();
+  }
+
+  String _resolveWorkflowOrgNumber(UserLoginInfo loginInfo) {
+    if (loginInfo.zxbm.isNotEmpty) {
+      return loginInfo.zxbm;
+    }
+    if (loginInfo.jgbh.isNotEmpty) {
+      return loginInfo.jgbh;
+    }
+    return loginInfo.jgbm;
   }
 
   String _buildHashRouteUrl(
