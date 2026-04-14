@@ -68,6 +68,15 @@ class HybridWorkflowService {
       todo: todo,
     );
     final String orgNumber = _resolveWorkflowOrgNumber(loginInfo);
+    final String flowtype = _readLaunchPayloadString(launchPayload, 'flowtype');
+    final String processDefinitionKey = _readLaunchPayloadString(
+      launchPayload,
+      'processDefinitionKey',
+    );
+    final String processKey = _readLaunchPayloadString(
+      launchPayload,
+      'processKey',
+    );
     final Map<String, String> queryParameters = <String, String>{
       'businessKey': _readLaunchPayloadString(launchPayload, 'businessKey'),
       'bpmid': _readLaunchPayloadString(launchPayload, 'bpmid'),
@@ -75,13 +84,11 @@ class HybridWorkflowService {
       'ticket': 'nothing',
       'qycode': loginInfo.qycode,
       'ztConfig': approvalZtConfig,
-      'flowable': _readLaunchPayloadString(launchPayload, 'flowtype'),
-      'flowtype': _readLaunchPayloadString(launchPayload, 'flowtype'),
-      'processDefinitionKey':
-          _readLaunchPayloadString(launchPayload, 'processDefinitionKey')
-              .isNotEmpty
-          ? _readLaunchPayloadString(launchPayload, 'processDefinitionKey')
-          : _readLaunchPayloadString(launchPayload, 'processKey'),
+      'flowable': flowtype,
+      'flowtype': flowtype,
+      'processDefinitionKey': processDefinitionKey.isNotEmpty
+          ? processDefinitionKey
+          : processKey,
       'taskName': _readLaunchPayloadString(launchPayload, 'taskName'),
       'taskid': _readLaunchPayloadString(launchPayload, 'taskid'),
       'nodeType': 'check',

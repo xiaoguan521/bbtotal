@@ -83,7 +83,7 @@ class CheckInLocationPreset {
       final Uri baseUri = Uri.parse(baseUrl);
       final Map<String, String> queryParameters =
           Map<String, String>.from(baseUri.queryParameters);
-      _applyDynamicParameters(queryParameters);
+      _applyDynamicParameters(queryParameters, routePath: baseUri.path);
       return baseUri.replace(queryParameters: queryParameters);
     }
 
@@ -93,7 +93,7 @@ class CheckInLocationPreset {
     final Map<String, String> queryParameters =
         Map<String, String>.from(fragmentUri.queryParameters);
 
-    _applyDynamicParameters(queryParameters);
+    _applyDynamicParameters(queryParameters, routePath: fragmentUri.path);
 
     final Uri updatedFragmentUri = fragmentUri.replace(
       queryParameters: queryParameters,
@@ -103,35 +103,60 @@ class CheckInLocationPreset {
     return Uri.parse(rebuilt);
   }
 
-  void _applyDynamicParameters(Map<String, String> queryParameters) {
-    queryParameters['tyLoginToken'] = loginInfo.loginToken;
-    queryParameters['userid'] = loginInfo.userId.toString();
-    queryParameters['dx_29_sjdxsl'] = loginInfo.userId.toString();
-    queryParameters['khbh'] = loginInfo.grbh;
-    queryParameters['zjhm'] = loginInfo.idCard;
+  void _applyDynamicParameters(
+    Map<String, String> queryParameters, {
+    required String routePath,
+  }) {
+    final String orgNumber = loginInfo.zxbm.isNotEmpty
+        ? loginInfo.zxbm
+        : loginInfo.jgbh;
+    final bool isApprovalRoute = routePath.contains('/dxslglComp/dxslglsp/index');
 
-    if (loginInfo.jgbm.isNotEmpty) {
-      queryParameters['jgbm'] = loginInfo.jgbm;
+    _putIfMissing(queryParameters, 'tyLoginToken', loginInfo.loginToken);
+    _putIfMissing(queryParameters, 'userid', loginInfo.userId.toString());
+    _putIfMissing(queryParameters, 'khbh', loginInfo.grbh);
+    _putIfMissing(queryParameters, 'zjhm', loginInfo.idCard);
+
+    if (orgNumber.isNotEmpty) {
+      _putIfMissing(queryParameters, 'jgbm', orgNumber);
     }
     if (loginInfo.zxbm.isNotEmpty) {
-      queryParameters['zxbm'] = loginInfo.zxbm;
+      _putIfMissing(queryParameters, 'zxbm', loginInfo.zxbm);
     } else {
-      queryParameters['zxbm'] = loginInfo.jgbh;
+      _putIfMissing(queryParameters, 'zxbm', loginInfo.jgbh);
     }
     if (loginInfo.qycode.isNotEmpty) {
-      queryParameters['qycode'] = loginInfo.qycode;
+      _putIfMissing(queryParameters, 'qycode', loginInfo.qycode);
     }
     if (loginInfo.zzjgdmz.isNotEmpty) {
-      queryParameters['zzjgdmz'] = loginInfo.zzjgdmz;
+      _putIfMissing(queryParameters, 'zzjgdmz', loginInfo.zzjgdmz);
     }
-    if (deviceIdentifier.isNotEmpty) {
-      queryParameters['dx_29_sbsbm'] = deviceIdentifier;
-      queryParameters['sbsbm'] = deviceIdentifier;
-      queryParameters['deviceId'] = deviceIdentifier;
+    if (!isApprovalRoute) {
+      _putIfMissing(queryParameters, 'dx_29_sjdxsl', loginInfo.userId.toString());
+      if (deviceIdentifier.isNotEmpty) {
+        _putIfMissing(queryParameters, 'dx_29_sbsbm', deviceIdentifier);
+        _putIfMissing(queryParameters, 'sbsbm', deviceIdentifier);
+        _putIfMissing(queryParameters, 'deviceId', deviceIdentifier);
+      }
     }
     if (cheque.isNotEmpty) {
-      queryParameters['cheque'] = cheque;
+      _putIfMissing(queryParameters, 'cheque', cheque);
     }
+  }
+
+  void _putIfMissing(
+    Map<String, String> queryParameters,
+    String key,
+    String value,
+  ) {
+    if (value.isEmpty) {
+      return;
+    }
+    final String? existing = queryParameters[key];
+    if (existing != null && existing.isNotEmpty) {
+      return;
+    }
+    queryParameters[key] = value;
   }
 
   Map<String, dynamic> toBridgePayload() {

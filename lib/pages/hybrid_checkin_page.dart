@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -66,6 +67,23 @@ class _HybridCheckInPageState extends State<HybridCheckInPage> {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  void _trace(String message) {
+    debugPrint('[待办处理] $message');
+  }
+
+  void _traceJson(String label, Object? value) {
+    String serialized;
+    try {
+      serialized = const JsonEncoder.withIndent('  ').convert(value);
+    } catch (_) {
+      serialized = value?.toString() ?? 'null';
+    }
+    _trace('$label:');
+    for (final String line in const LineSplitter().convert(serialized)) {
+      debugPrint(line);
+    }
   }
 
   void _handleUsernameChanged(String value) {
@@ -276,6 +294,7 @@ class _HybridCheckInPageState extends State<HybridCheckInPage> {
         return;
       }
 
+      _traceJson('matchedTodo', matchedTodo);
       final String url = _workflowService.buildApprovalPageUrl(
         loginInfo: loginInfo,
         todo: matchedTodo,
@@ -283,6 +302,8 @@ class _HybridCheckInPageState extends State<HybridCheckInPage> {
       );
       final Map<String, dynamic> launchPayload = _workflowService
           .buildApprovalLaunchPayload(todo: matchedTodo);
+      _traceJson('launchPayload', launchPayload);
+      _trace('approvalUrl(before preset)=$url');
       _navigateToWebView(
         rawUrl: url,
         preset: preset,
@@ -312,10 +333,16 @@ class _HybridCheckInPageState extends State<HybridCheckInPage> {
           .fetchPendingTodos(loginInfo, ywzt: ywzt);
       final List<Map<String, dynamic>> items = _workflowService
           .extractTodoItems(payload);
+      final Object? rawResults = payload['results'];
+      _trace(
+        'dbtable response: ywzt=$ywzt total=${items.length} '
+        'results=${rawResults is List ? rawResults.length : 0}',
+      );
       final Map<String, dynamic>? matched = _workflowService.pickCheckInTodo(
         items,
       );
       if (matched != null) {
+        _trace('matched pending todo in ywzt=$ywzt');
         return matched;
       }
     }
@@ -337,6 +364,8 @@ class _HybridCheckInPageState extends State<HybridCheckInPage> {
             preset: preset,
             launchPayload: launchPayload,
           );
+      _trace('approvalUrl(after preset)=${runtimeContext.resolvedUri}');
+      _traceJson('runtime.launchPayload', runtimeContext.launchPayload);
 
       Navigator.of(context).push(
         MaterialPageRoute<void>(

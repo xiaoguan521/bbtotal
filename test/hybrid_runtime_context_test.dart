@@ -121,4 +121,42 @@ void main() {
       );
     },
   );
+
+  test('approval runtime keeps workflow url while preset only fills missing auth params', () {
+    final HybridRuntimeContext context = HybridRuntimeContext.fromInputs(
+      baseUrl:
+          'https://appsy.jbysoft.com/dxgl-app/dxslgl/dxslglComp/dxslglsp/index'
+          '?businessKey=1012867450330'
+          '&bpmid=1012867450330'
+          '&processInstanceId=bd82a635-37aa-11f1-bb80-3e64db595ffa'
+          '&taskDefinitionKey=a407480927d991'
+          '&processDefinitionId=k_1734318719996%3A6%3A1781bb04-2d99-11f1-b68e-6e03c0170726'
+          '&jgbm=1301100001',
+      loginInfo: loginInfo,
+      preset: preset,
+      launchPayload: const <String, dynamic>{
+        'processInstanceId': 'bd82a635-37aa-11f1-bb80-3e64db595ffa',
+        'taskDefinitionKey': 'a407480927d991',
+        'processDefinitionId':
+            'k_1734318719996:6:1781bb04-2d99-11f1-b68e-6e03c0170726',
+      },
+    );
+
+    expect(context.resolvedUri.queryParameters['jgbm'], '1301100001');
+    expect(
+      context.resolvedUri.queryParameters['processInstanceId'],
+      'bd82a635-37aa-11f1-bb80-3e64db595ffa',
+    );
+    expect(
+      context.resolvedUri.queryParameters['taskDefinitionKey'],
+      'a407480927d991',
+    );
+    expect(
+      context.resolvedUri.queryParameters['processDefinitionId'],
+      'k_1734318719996:6:1781bb04-2d99-11f1-b68e-6e03c0170726',
+    );
+    expect(context.resolvedUri.queryParameters['tyLoginToken'], 'token:app_02');
+    expect(context.resolvedUri.queryParameters.containsKey('dx_29_sjdxsl'), isFalse);
+    expect(context.resolvedUri.queryParameters.containsKey('deviceId'), isFalse);
+  });
 }
