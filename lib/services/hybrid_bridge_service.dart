@@ -1508,11 +1508,31 @@ class HybridBridgeService {
         );
       }
       if (shouldPatchUrl(requestUrl)) {
+        const normalizeHeaderValue = (headerKey, headerValue) => {
+          const raw = headerValue == null ? '' : String(headerValue);
+          if (
+            headerKey === 'login-token' ||
+            headerKey === 'tylogintoken'
+          ) {
+            try {
+              return decodeURIComponent(raw);
+            } catch (_) {
+              return raw;
+            }
+          }
+          return raw;
+        };
         Object.entries(authHeaders).forEach(([key, value]) => {
-          if (!value || this.__bbtotalHeaders[key.toLowerCase()] === value) {
+          const headerKey = String(key || '').toLowerCase();
+          const existing = this.__bbtotalHeaders[headerKey];
+          if (
+            !value ||
+            normalizeHeaderValue(headerKey, existing) ===
+              normalizeHeaderValue(headerKey, value)
+          ) {
             return;
           }
-          this.__bbtotalHeaders[key.toLowerCase()] = value;
+          this.__bbtotalHeaders[headerKey] = value;
           try {
             originalSetRequestHeader.call(this, key, value);
           } catch (_) {}

@@ -83,6 +83,7 @@ void main() {
     );
     expect(source, contains("simei: createSyncBridgeMethod('I.simei'"));
     expect(source, contains("fn2: createSyncBridgeMethod('iapp.fn2'"));
+    expect(source, contains('decodeURIComponent(raw)'));
   });
 
   test(
