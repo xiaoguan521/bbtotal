@@ -1388,10 +1388,42 @@ class HybridBridgeService {
   const mergeHeaders = (source) => {
     const headers = new Headers(source || {});
     Object.entries(authHeaders).forEach(([key, value]) => {
-      if (!value || headers.has(key)) {
+      const headerKey = String(key || '');
+      const lowerKey = headerKey.toLowerCase();
+      if (!value) {
         return;
       }
-      headers.set(key, value);
+      if (lowerKey === 'login-token' || lowerKey === 'tylogintoken') {
+        const existing = headers.get(headerKey);
+        const rawExisting = existing == null ? '' : String(existing);
+        const rawValue = String(value);
+        const normalizedExisting = (() => {
+          try {
+            return decodeURIComponent(rawExisting);
+          } catch (_) {
+            return rawExisting;
+          }
+        })();
+        const normalizedValue = (() => {
+          try {
+            return decodeURIComponent(rawValue);
+          } catch (_) {
+            return rawValue;
+          }
+        })();
+        if (normalizedExisting && normalizedExisting === normalizedValue) {
+          if (rawExisting !== normalizedValue) {
+            headers.set(headerKey, normalizedValue);
+          }
+          return;
+        }
+        headers.set(headerKey, rawValue);
+        return;
+      }
+      if (headers.has(headerKey)) {
+        return;
+      }
+      headers.set(headerKey, value);
     });
     return headers;
   };
@@ -1487,9 +1519,27 @@ class HybridBridgeService {
     const originalSetRequestHeader = xhrPrototype.setRequestHeader;
 
     xhrPrototype.setRequestHeader = function(name, value) {
+      const headerKey = String(name || '').toLowerCase();
+      let normalizedValue = value;
+      if (headerKey === 'login-token' || headerKey === 'tylogintoken') {
+        const raw = value == null ? '' : String(value);
+        try {
+          normalizedValue = decodeURIComponent(raw);
+        } catch (_) {
+          normalizedValue = value;
+        }
+      }
       this.__bbtotalHeaders = this.__bbtotalHeaders || {};
-      this.__bbtotalHeaders[name.toLowerCase()] = value;
-      return originalSetRequestHeader.call(this, name, value);
+      const existing = this.__bbtotalHeaders[headerKey];
+      if (
+        (headerKey === 'login-token' || headerKey === 'tylogintoken') &&
+        existing != null &&
+        String(existing) === String(normalizedValue)
+      ) {
+        return;
+      }
+      this.__bbtotalHeaders[headerKey] = normalizedValue;
+      return originalSetRequestHeader.call(this, name, normalizedValue);
     };
 
     xhrPrototype.open = function(method, url, ...rest) {
@@ -1531,16 +1581,6 @@ class HybridBridgeService {
             !value ||
             normalizedExisting === normalizedValue
           ) {
-            if (
-              existing != null &&
-              (headerKey === 'login-token' || headerKey === 'tylogintoken') &&
-              String(existing) !== normalizedExisting
-            ) {
-              this.__bbtotalHeaders[headerKey] = normalizedValue;
-              try {
-                originalSetRequestHeader.call(this, key, normalizedValue);
-              } catch (_) {}
-            }
             return;
           }
           this.__bbtotalHeaders[headerKey] = value;

@@ -86,6 +86,7 @@ void main() {
     expect(source, contains('decodeURIComponent(raw)'));
     expect(source, contains("headerKey === 'login-token'"));
     expect(source, contains("headerKey === 'tylogintoken'"));
+    expect(source, contains('headers.set(headerKey, normalizedValue)'));
   });
 
   test(
