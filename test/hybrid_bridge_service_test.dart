@@ -84,6 +84,8 @@ void main() {
     expect(source, contains("simei: createSyncBridgeMethod('I.simei'"));
     expect(source, contains("fn2: createSyncBridgeMethod('iapp.fn2'"));
     expect(source, contains('decodeURIComponent(raw)'));
+    expect(source, contains("headerKey === 'login-token'"));
+    expect(source, contains("headerKey === 'tylogintoken'"));
   });
 
   test(

@@ -1525,11 +1525,22 @@ class HybridBridgeService {
         Object.entries(authHeaders).forEach(([key, value]) => {
           const headerKey = String(key || '').toLowerCase();
           const existing = this.__bbtotalHeaders[headerKey];
+          const normalizedExisting = normalizeHeaderValue(headerKey, existing);
+          const normalizedValue = normalizeHeaderValue(headerKey, value);
           if (
             !value ||
-            normalizeHeaderValue(headerKey, existing) ===
-              normalizeHeaderValue(headerKey, value)
+            normalizedExisting === normalizedValue
           ) {
+            if (
+              existing != null &&
+              (headerKey === 'login-token' || headerKey === 'tylogintoken') &&
+              String(existing) !== normalizedExisting
+            ) {
+              this.__bbtotalHeaders[headerKey] = normalizedValue;
+              try {
+                originalSetRequestHeader.call(this, key, normalizedValue);
+              } catch (_) {}
+            }
             return;
           }
           this.__bbtotalHeaders[headerKey] = value;
