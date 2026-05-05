@@ -15,16 +15,28 @@ Thumbs.db
 .pub/
 build/
 coverage/
+.docker/
+
+# Disabled Flutter targets
+web/
+windows/
 
 # Local build helpers
 .gradle/
 .gradle-user-home/
 build_logs/
+*.apk
 123/
 123.zip
 456/
 456.zip
 bbgl/
+apktool*.jar
+apktool*.bat*
+jadx-gui-*/
+jadx-gui-*.zip
+贝贝管理.apk
+111.apk
 
 # Android
 android/.gradle/
@@ -38,13 +50,3 @@ android/*.keystore
 **/GeneratedPluginRegistrant.java
 **/GeneratedPluginRegistrant.h
 **/GeneratedPluginRegistrant.m
-456.apk
-.gitignore
-apktool.bat.txt
-apktool_3.0.1.jar
-jadx-gui-1.5.5-win.zip
-.gitignore
-贝贝管理.apk
-jadx-gui-1.5.5-win/lib/jadx-gui-1.5.5-all.jar
-jadx-gui-1.5.5-win/jadx-gui-1.5.5.exe
-111.apk

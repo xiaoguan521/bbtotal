@@ -1,0 +1,7 @@
+FROM ghcr.io/cirruslabs/flutter:stable
+
+WORKDIR /workspace
+
+ENV GRADLE_OPTS="-Dorg.gradle.vfs.watch=false"
+
+CMD ["bash", "-lc", "flutter pub get && flutter build apk --debug"]

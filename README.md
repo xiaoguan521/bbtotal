@@ -40,7 +40,7 @@ The current MVP focuses on:
 
 - `lib/pages/hybrid_checkin_page.dart`
   - one-page hybrid shell
-  - business URL input
+  - username-driven check-in entry
   - token/cheque/history/location preparation
   - embedded `InAppWebView`
   - diagnostics panel
@@ -116,6 +116,41 @@ This repository should stay small:
 - minimal business bootstrap services
 
 No iOS target, no mock location, no custom native WebView implementation unless real device behavior forces it.
+
+The repository is intentionally Android-only. Old reverse-engineering artifacts,
+Flutter Web templates, and Windows desktop templates are not part of the
+maintained source tree.
+
+## Build Android APK With Docker
+
+If the host machine does not have Android SDK installed, use OrbStack or Docker
+to build inside a container:
+
+```bash
+./tool/build_android_apk_docker.sh debug
+```
+
+The APK is written to:
+
+```text
+build/app/outputs/flutter-apk/app-debug.apk
+```
+
+Release mode uses the same container:
+
+```bash
+./tool/build_android_apk_docker.sh release
+```
+
+For a signed release, provide the same environment variables used by CI:
+
+```bash
+ANDROID_KEYSTORE_PATH=/workspace/android/upload-keystore.jks \
+ANDROID_KEYSTORE_PASSWORD=... \
+ANDROID_KEY_ALIAS=... \
+ANDROID_KEY_PASSWORD=... \
+./tool/build_android_apk_docker.sh release
+```
 
 ## GitHub Remote Bridge
 
